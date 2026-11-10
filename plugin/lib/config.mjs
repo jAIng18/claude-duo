@@ -1,6 +1,6 @@
 // ~/.claude-duo/config.json: defaults, validation, peer lookup.
 import fs from 'node:fs';
-import { paths, normalizeDir, currentConfigDir } from './paths.mjs';
+import { paths, normalizeDir, currentConfigDir, isDefaultConfigDir } from './paths.mjs';
 import { readJSON, writeJSONAtomic, ensureDir } from './fsutil.mjs';
 
 export const PEERS = ['A', 'B'];
@@ -135,6 +135,9 @@ export function requireMe(cfg, env = process.env) {
 
 export const other = (p) => (p === 'A' ? 'B' : 'A');
 export const label = (cfg, p) => `${p}:${cfg.peers[p].name}`;
+
+/** Command the user types to open `peer`: plain `claude` for the default config dir, else claude-a / claude-b. */
+export const launchCmd = (cfg, p) => (isDefaultConfigDir(cfg.peers[p].config_dir) ? 'claude' : `claude-${p.toLowerCase()}`);
 export const directionKey = (from, to) => `${from}_to_${to}`;
 
 /** Get/set a dotted key, used by `duo config` and the duo_config tool. */

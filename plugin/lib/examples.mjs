@@ -49,6 +49,6 @@ export function installExample(cfg, name, { overwrite = false } = {}) {
   }
   saveConfig(next);
   lines.unshift(`Installed example pack "${ex.title}". Roles: A = ${next.peers.A.name}, B = ${next.peers.B.name}.`);
-  lines.push('Restart claude-a / claude-b to load the new agents.');
+  lines.push('Restart open claude / claude-b sessions to load the new agents.');
   return { lines };
 }

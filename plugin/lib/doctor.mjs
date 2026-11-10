@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { configExists, loadConfig, PEERS, label } from './config.mjs';
+import { configExists, loadConfig, PEERS, label, launchCmd } from './config.mjs';
 import { authStatus, version, cmpVersion, MIN_VERSION, configDirExists } from './claude.mjs';
 import { hasTmux } from './tmux.mjs';
 import { paths, normalizeDir, isTrusted } from './paths.mjs';
@@ -35,7 +35,7 @@ export async function doctor({ cwd = process.cwd() } = {}) {
   if (process.env.ANTHROPIC_API_KEY) warn('Biến ANTHROPIC_API_KEY đang được đặt: nó sẽ ghi đè đăng nhập của CẢ HAI tài khoản', 'Xóa export ANTHROPIC_API_KEY khỏi ~/.zshrc');
 
   if (!configExists()) {
-    fail(`Chưa có cấu hình ${paths.config()}`, 'Mở claude-a rồi gõ /duo:setup (hoặc chạy `duo init`)');
+    fail(`Chưa có cấu hình ${paths.config()}`, 'Mở claude rồi gõ /duo:setup (hoặc chạy `duo init`)');
     return out;
   }
   let cfg;
@@ -52,9 +52,9 @@ export async function doctor({ cwd = process.cwd() } = {}) {
     const dir = cfg.peers[p].config_dir;
     const nd = normalizeDir(dir);
     if (dir !== nd && !dir.startsWith('~/')) warn(`peers.${p}.config_dir "${dir}" chưa chuẩn hóa (sẽ dùng ${nd})`);
-    if (!configDirExists(dir)) { fail(`${label(cfg, p)}: config dir ${nd} chưa tồn tại / chưa đăng nhập`, p === 'A' ? 'Chạy `claude` và /login' : `Chạy claude-${p.toLowerCase()} rồi gõ /login bằng tài khoản thứ 2`); continue; }
+    if (!configDirExists(dir)) { fail(`${label(cfg, p)}: config dir ${nd} chưa tồn tại / chưa đăng nhập`, `Chạy ${launchCmd(cfg, p)} rồi gõ /login${p === 'A' ? '' : ' bằng tài khoản thứ 2'}`); continue; }
     const st = await authStatus(dir);
-    if (!st.loggedIn) { fail(`${label(cfg, p)}: chưa đăng nhập (${nd})`, `Chạy claude-${p.toLowerCase()} rồi gõ /login`); continue; }
+    if (!st.loggedIn) { fail(`${label(cfg, p)}: chưa đăng nhập (${nd})`, `Chạy ${launchCmd(cfg, p)} rồi gõ /login`); continue; }
     accounts[p] = st;
     ok(`${label(cfg, p)}: đăng nhập ${st.subscriptionType || st.authMethod}${st.email ? ` (${st.email})` : ''}`);
     const ps = pluginState(dir);
@@ -64,7 +64,7 @@ export async function doctor({ cwd = process.cwd() } = {}) {
     else ok(`${label(cfg, p)}: plugin ${ps.installed} đã bật`);
     if (!hasPermissionRule(dir)) warn(`${label(cfg, p)}: chưa cho phép sẵn các tool duo (sẽ bị hỏi quyền mỗi lần)`, 'duo install-permissions');
     const t = isTrusted(dir, cwd);
-    if (t === false) warn(`${label(cfg, p)} chưa tin cậy thư mục ${cwd} (mode background sẽ không chạy được ở đây)`, `cd ${cwd} && claude-${p.toLowerCase()}  → chọn Yes ở hộp thoại tin cậy`);
+    if (t === false) warn(`${label(cfg, p)} chưa tin cậy thư mục ${cwd} (mode background sẽ không chạy được ở đây)`, `cd ${cwd} && ${launchCmd(cfg, p)}  → chọn Yes ở hộp thoại tin cậy`);
   }
   if (accounts.A && accounts.B) {
     const same = (accounts.A.orgId && accounts.A.orgId === accounts.B.orgId) || (accounts.A.email && accounts.A.email === accounts.B.email);

@@ -126,7 +126,7 @@ if [ "$ALIASES" = 1 ]; then
   } > "$TMP.new"
   cmp -s "$RC" "$TMP.new" || { cp "$RC" "$RC.bak-claude-duo"; mv "$TMP.new" "$RC"; }
   rm -f "$TMP" "$TMP.new"
-  ok "duo, claude-a, claude-b (mở terminal mới hoặc chạy: source ~/.zshrc)"
+  ok "duo, claude-b, claude-a (mở terminal mới hoặc chạy: source ~/.zshrc)"
 fi
 
 step "Kiểm tra"
@@ -152,7 +152,8 @@ else
   echo "  1. Tài khoản B đã đăng nhập ✅"
 fi
 cat <<EOF
-  2. Mở terminal mới, gõ:   claude-a     rồi gõ:  /duo:setup
+  2. Mở terminal mới, gõ:   claude       rồi gõ:  /duo:setup
+     (tài khoản A mở bằng claude như bình thường; tài khoản B mở bằng claude-b)
      (chọn tên, vai trò, cách giao nhận cho 2 tài khoản)
   3. Gõ /duo:test để thử gửi một việc sang tài khoản kia.
 

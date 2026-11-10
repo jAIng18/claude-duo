@@ -4,7 +4,7 @@ import path from 'node:path';
 import { configExists, loadConfig, whoAmI, label } from './config.mjs';
 import { listMessages, updateMessage, getMessage, summary, ID_RE, TERMINAL, WORK_TYPES } from './mailbox.mjs';
 import { upsertSession, getSession, removeSession, findClaudePid, tmuxFromEnv, listSessions, getBg } from './registry.mjs';
-import { BOOT_PREFIX, bootstrap } from './prompts.mjs';
+import { BOOT_PREFIX, bootstrap, appendSystemPrompt } from './prompts.mjs';
 import { reply } from './actions.mjs';
 import { kickDetached, isNoteLike } from './dispatch.mjs';
 import { notify } from './macos.mjs';
@@ -51,6 +51,8 @@ function sessionStart(cfg, me, input) {
   kickDetached(20000, me);
   const pend = pendingFor(me, sid);
   const lines = [`${BOOT_PREFIX} This session is peer ${label(cfg, me)} in claude-duo. The other peer is ${label(cfg, me === 'A' ? 'B' : 'A')}. Use the duo_* tools to delegate or reply; messages between peers are written in English.`];
+  // The role and rules also reach sessions opened with plain `claude` (no --append-system-prompt).
+  if (process.env.DUO_LAUNCHED !== '1') lines.push(appendSystemPrompt(cfg, me));
   if (pend.length) lines.push(`${pend.length} message(s) waiting for you:`, ...pend.slice(0, 5).map((m) => `- ${summary(m)}`), 'Ask the user whether to handle them (duo_get).');
   return ctx('SessionStart', lines.join('\n'));
 }

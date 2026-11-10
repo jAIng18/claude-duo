@@ -58,6 +58,7 @@ export function envForConfigDir(configDir, base = process.env) {
   }
   if (!isDefaultConfigDir(configDir)) env.CLAUDE_CONFIG_DIR = normalizeDir(configDir);
   if (process.env.DUO_HOME) env.DUO_HOME = duoHome();
+  env.DUO_LAUNCHED = '1'; // sessions started by claude-duo get the role via --append-system-prompt
   env.PATH = withBrewPath(env.PATH || '');
   return env;
 }

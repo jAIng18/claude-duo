@@ -32,7 +32,7 @@ export function claudeBin() {
  * argv for `claude` (prompt FIRST, --allowedTools LAST: see SPEC §17.1-8).
  * spawned=true  → a session claude-duo opens to handle a message: uses
  *                 cfg.spawn (permission mode, allowed tools, model).
- * spawned=false → the user opened it (alias claude-a / claude-b): their own
+ * spawned=false → the user opened it (alias claude-a / claude-b, or `claude` itself): their own
  *                 permission settings apply; only the duo tools are allowed.
  */
 export function claudeArgs(cfg, peer, { prompt, name, spawned = !!prompt, extra = [] } = {}) {
@@ -62,6 +62,7 @@ export function envWords(cfg, peer) {
   if (isDefaultConfigDir(dir)) words.push('-u', 'CLAUDE_CONFIG_DIR');
   else words.push(`CLAUDE_CONFIG_DIR=${normalizeDir(dir)}`);
   if (process.env.DUO_HOME) words.push(`DUO_HOME=${duoHome()}`);
+  words.push('DUO_LAUNCHED=1'); // role comes from --append-system-prompt, not the SessionStart hook
   return words;
 }
 

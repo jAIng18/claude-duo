@@ -11,10 +11,10 @@ Steps:
 4. Explain how the receiving side runs, per direction (A→B and B→A):
    - **background** (default, recommended): runs silently, no extra windows; the result comes back to the conversation that asked. It remembers earlier tasks. The receiving account must have trusted the working folder once.
    - **new-tab**: opens a new Terminal window so the user can watch it work.
-   - **live-session**: types the task into the other account's window that is already open (started with `claude-a` / `claude-b`).
+   - **live-session**: types the task into the other account's window that is already open (only windows started with `claude-a` / `claude-b`, which run inside tmux; a plain `claude` window cannot receive typed messages).
 5. Ask whether they want to **approve each message before it is sent** (default: yes).
 6. Show a summary table of the configuration. When the user agrees, call `duo_config` with `action: "init"`, `user_confirmed: true`, `values` = the chosen values (e.g. `{"peers":{"A":{"name":"Planner","role":"..."},"B":{"name":"Maker","role":"...","config_dir":"~/.claude-b"}},"delivery":{"A_to_B":"background","B_to_A":"background","fallback":"none"},"approval":{"before_send":"ask","before_accept":"auto"}}`).
 7. If they chose an example pack: call `duo_examples` with `action: "install"`, `name`, `user_confirmed: true`.
-8. Finish by suggesting `/duo:test`. If the second account is not logged in yet: open a new terminal, run `claude-b`, then `/login`. For background mode, the second account must trust each working folder once: `cd <folder> && claude-b`, answer "Yes", then `/exit`.
+8. Finish by suggesting `/duo:test`. Account A is opened with plain `claude`; account B with `claude-b`. If the second account is not logged in yet: open a new terminal, run `claude-b`, then `/login`. For background mode, the second account must trust each working folder once: `cd <folder> && claude-b`, answer "Yes", then `/exit`.
 
 Never set `spawn.permission_mode` to `bypassPermissions`.

@@ -1,7 +1,7 @@
 // Delivery of messages to the receiving peer. SPEC §7.
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
-import { directionKey, label, DUO_MCP_RULE } from './config.mjs';
+import { directionKey, label, launchCmd, DUO_MCP_RULE } from './config.mjs';
 import { getMessage, updateMessage, addDeliveryLog, TERMINAL, listMessages } from './mailbox.mjs';
 import { listSessions, getSession, getBg, setBg } from './registry.mjs';
 import { safeInject, paneExists, hasTmux } from './tmux.mjs';
@@ -128,7 +128,7 @@ async function peerLoggedIn(cfg, peer) {
 }
 
 export function loginHint(cfg, peer) {
-  return `Account ${label(cfg, peer)} is not logged in on this Mac. Ask the user to open a new terminal, run: claude-${peer.toLowerCase()} — then type /login, sign in with that account, and type /exit. The message stays queued and is delivered automatically once that account starts a session.`;
+  return `Account ${label(cfg, peer)} is not logged in on this Mac. Ask the user to open a new terminal, run: ${launchCmd(cfg, peer)} — then type /login, sign in with that account, and type /exit. The message stays queued and is delivered automatically once that account starts a session.`;
 }
 
 async function tryBackground(cfg, msg) {
@@ -137,7 +137,7 @@ async function tryBackground(cfg, msg) {
   const cwd = cwdFor(msg);
   if (!(await peerLoggedIn(cfg, peer))) return { ok: false, error: 'auth_required', hint: loginHint(cfg, peer) };
   const trusted = isTrusted(configDir, cwd);
-  if (trusted === false) return { ok: false, error: 'workspace_not_trusted', hint: `Account ${label(cfg, peer)} has not trusted the folder ${cwd} yet. Ask the user to run, once, in a terminal: cd ${cwd} && claude-${peer.toLowerCase()} — choose "Yes" when asked to trust the folder, then /exit. After that, resend.` };
+  if (trusted === false) return { ok: false, error: 'workspace_not_trusted', hint: `Account ${label(cfg, peer)} has not trusted the folder ${cwd} yet. Ask the user to run, once, in a terminal: cd ${cwd} && ${launchCmd(cfg, peer)} — choose "Yes" when asked to trust the folder, then /exit. After that, resend.` };
   const prompt = bootstrap(cfg, msg);
   const bg = cfg.background.keep_context ? getBg(peer) : null;
   if (bg && bg.cwd === cwd && bg.session_id) {
@@ -172,7 +172,7 @@ async function tryBackground(cfg, msg) {
   });
   if (!r.ok) {
     const hint = r.error === 'auth_required' ? loginHint(cfg, peer)
-      : r.error === 'workspace_not_trusted' ? `Account ${label(cfg, peer)} has not trusted the folder ${cwd} yet. Ask the user to run, once, in a terminal: cd ${cwd} && claude-${peer.toLowerCase()} — choose "Yes" when asked to trust the folder, then /exit.`
+      : r.error === 'workspace_not_trusted' ? `Account ${label(cfg, peer)} has not trusted the folder ${cwd} yet. Ask the user to run, once, in a terminal: cd ${cwd} && ${launchCmd(cfg, peer)} — choose "Yes" when asked to trust the folder, then /exit.`
         : undefined;
     return { ok: false, error: r.error, raw: r.raw, hint };
   }
@@ -217,8 +217,8 @@ async function deliverWork(cfg, msg) {
   const err = last ? last.error : 'unknown';
   record(msg.id, { event: 'failed' }, { error: err, meta: { queued_reason: err, queued_mode: null, hard_failure: true, failure_notified: true, last_hint: last && last.hint ? last.hint : null } });
   if (cfg.notify && !msg.meta.failure_notified) {
-    const short = err === 'auth_required' ? `${label(cfg, msg.to)} is not logged in. Run claude-${msg.to.toLowerCase()} then /login.`
-      : err === 'workspace_not_trusted' ? `${label(cfg, msg.to)} has not trusted ${cwdFor(msg)}. Run claude-${msg.to.toLowerCase()} there once.`
+    const short = err === 'auth_required' ? `${label(cfg, msg.to)} is not logged in. Run ${launchCmd(cfg, msg.to)} then /login.`
+      : err === 'workspace_not_trusted' ? `${label(cfg, msg.to)} has not trusted ${cwdFor(msg)}. Run ${launchCmd(cfg, msg.to)} there once.`
         : `${msg.id}: ${err}`;
     notify('claude-duo: not delivered yet', short);
   }

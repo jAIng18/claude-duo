@@ -41,6 +41,15 @@ test('SessionStart registers the session and announces identity + pending work',
   assert.equal(s.cwd, sb.root);
 });
 
+test('SessionStart gives the role to a plain `claude` session, not to one claude-duo launched', () => {
+  const { DUO_LAUNCHED, ...plain } = sb.envB;
+  const own = hook('SessionStart', { ...base('eeeeeeee-0000-0000-0000-000000000005') }, plain).hookSpecificOutput.additionalContext;
+  assert.match(own, /Your role, set by the user:/);
+  assert.match(own, /ALWAYS finish with duo_reply/);
+  const launched = hook('SessionStart', { ...base('eeeeeeee-0000-0000-0000-000000000006') }, { ...plain, DUO_LAUNCHED: '1' }).hookSpecificOutput.additionalContext;
+  assert.doesNotMatch(launched, /Your role, set by the user:/);
+});
+
 test('UserPromptSubmit with a bootstrap prompt marks the message picked up and busy', async () => {
   const { message } = await A.send(cfg, 'A', SID_A, { type: 'task', title: 'pick me', body: 'b' }, { deliverNow: false });
   hook('UserPromptSubmit', { ...base(), prompt: `[claude-duo] New TASK ${message.id} from A:Planner: "pick me".` });
