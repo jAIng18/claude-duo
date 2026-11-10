@@ -53,6 +53,7 @@ Change it with `/duo:config`, e.g. *"show B's work in a new window"*.
 
 - Run `duo doctor` in a terminal. It checks everything and tells you how to fix each problem.
 - **"Stop hook error: [claude-duo] …"** is normal. It is how Claude Code shows claude-duo asking it to continue.
+- **`auth_required`**: the second account is not logged in yet. Run `claude-b`, type `/login`, sign in, then `/exit`. Anything sent before that waits in the queue and is delivered automatically once the account is logged in — no need to resend.
 - **`workspace_not_trusted`**: the receiving account has not trusted that folder yet. In that folder, run `claude-b` (or `claude-a`) once, choose **Yes** when asked to trust the folder, then `/exit`. Do this once per project folder.
 
 ## Uninstall

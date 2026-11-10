@@ -155,7 +155,8 @@ const handlers = {
   async duo_get(a, cfg, me, sid) {
     const r = A.get(cfg, me, sid, a.id);
     const parts = [A.render(r.message)];
-    if (r.needsAccept) parts.push('', '⚠️ NOT ACCEPTED YET: the configuration requires the user to agree first. Summarise the task for the user and ask; if they agree call duo_accept, otherwise duo_reject.');
+    if (r.otherHandler) parts.push('', `⚠️ ALREADY BEING HANDLED by another session of this account (${r.otherHandler.slice(0, 8)}). Do NOT work on it and do NOT call duo_reply for it; just tell the user it is in progress elsewhere.`);
+    else if (r.needsAccept) parts.push('', '⚠️ NOT ACCEPTED YET: the configuration requires the user to agree first. Summarise the task for the user and ask; if they agree call duo_accept, otherwise duo_reject.');
     else if (r.message.to === me && ['task', 'question'].includes(r.message.type) && r.message.status === 'in_progress') {
       parts.push('', `➡️ You are now handling this message. Stay within its scope, then call duo_reply(id="${r.message.id}") in English.`);
     }

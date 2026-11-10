@@ -124,8 +124,16 @@ export function get(cfg, me, sid, id) {
   let m = requireMessage(String(id));
   if (m.to !== me && m.from !== me) throw new DuoError('forbidden', 'This message does not belong to you');
   let needsAccept = false;
+  let otherHandler = null;
   if (m.to === me) {
     m = markExpired(m);
+    const h = m.meta.handler_session;
+    if (WORK_TYPES.includes(m.type) && ['accepted', 'in_progress'].includes(m.status) && sid && h && h !== sid) {
+      // Already taken by another session of this account. If that session is
+      // still alive, do not work on it twice; if it died, take it over.
+      if (listSessions(me).some((s) => s.session_id === h)) otherHandler = h;
+      else m = updateMessage(m.id, (x) => { x.meta.handler_session = sid; x.meta.taken_over_from = h; });
+    }
     if (WORK_TYPES.includes(m.type) && ['queued', 'delivered'].includes(m.status)) {
       if (cfg.approval.before_accept === 'ask' && !m.reply_to) needsAccept = true;
       else m = startWork(m.id, sid);
@@ -134,7 +142,7 @@ export function get(cfg, me, sid, id) {
       resumeAfterAnswer(m);
     }
   }
-  return { message: m, needsAccept, thread: thread(m.thread_id).filter((x) => x.id !== m.id) };
+  return { message: m, needsAccept, otherHandler, thread: thread(m.thread_id).filter((x) => x.id !== m.id) };
 }
 
 /** An answer to a needs_info question puts the original task back in progress. */
@@ -181,6 +189,10 @@ export async function reply(cfg, me, sid, a = {}, { deliverMode = 'sync' } = {})
   if (m.to !== me) throw new DuoError('forbidden', 'Only the receiver of the message can reply');
   if (!WORK_TYPES.includes(m.type)) throw new DuoError('bad_args', 'Only tasks/questions take duo_reply');
   if (TERMINAL.includes(m.status)) throw new DuoError('bad_state', `Message is already in state ${m.status}`);
+  const h = m.meta.handler_session;
+  if (sid && h && h !== sid && listSessions(me).some((s) => s.session_id === h)) {
+    throw new DuoError('forbidden', `Message ${m.id} is being handled by another session of this account (${h.slice(0, 8)}). Do not reply to it from here.`);
+  }
   if (['queued', 'delivered'].includes(m.status)) {
     if (cfg.approval.before_accept === 'ask' && !m.reply_to) throw new DuoError('approval_required', 'Message not accepted yet. Ask the user, then call duo_accept first.');
     m = startWork(m.id, sid);

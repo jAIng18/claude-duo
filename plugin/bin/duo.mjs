@@ -196,7 +196,7 @@ async function main() {
     }
     case 'kick': {
       const cfg = loadConfig();
-      const r = await kick(cfg);
+      const r = await kick(cfg, { peer: opt.peer ? peerArg(opt.peer) : null });
       if (r.length) console.log(JSON.stringify(r));
       return 0;
     }

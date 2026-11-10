@@ -46,7 +46,9 @@ function sessionStart(cfg, me, input) {
     entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT || null,
   });
   maybeGc(cfg);
-  kickDetached();
+  // This account is usable right now (e.g. the user just logged in): retry
+  // everything queued for it immediately, even messages that hard-failed.
+  kickDetached(20000, me);
   const pend = pendingFor(me, sid);
   const lines = [`${BOOT_PREFIX} This session is peer ${label(cfg, me)} in claude-duo. The other peer is ${label(cfg, me === 'A' ? 'B' : 'A')}. Use the duo_* tools to delegate or reply; messages between peers are written in English.`];
   if (pend.length) lines.push(`${pend.length} message(s) waiting for you:`, ...pend.slice(0, 5).map((m) => `- ${summary(m)}`), 'Ask the user whether to handle them (duo_get).');

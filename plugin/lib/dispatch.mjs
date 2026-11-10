@@ -6,7 +6,7 @@ import { getMessage, updateMessage, addDeliveryLog, TERMINAL, listMessages } fro
 import { listSessions, getSession, getBg, setBg } from './registry.mjs';
 import { safeInject, paneExists, hasTmux } from './tmux.mjs';
 import { openTerminal, notify } from './macos.mjs';
-import { agents, launchBg, resumeBg, stopBg } from './claude.mjs';
+import { agents, launchBg, resumeBg, stopBg, authStatus } from './claude.mjs';
 import { isTrusted, HOME, normalizeDir } from './paths.mjs';
 import { bootstrap, appendSystemPrompt } from './prompts.mjs';
 import { openCommandLine, DUO_CLI } from './open.mjs';
@@ -111,10 +111,31 @@ async function tryNewTab(cfg, msg) {
   return { ok: true, via: 'new-tab' };
 }
 
+/**
+ * Is the peer's account logged in? A positive answer is cached for 10 minutes
+ * (it costs a `claude auth status` call). Checked BEFORE the trust check:
+ * a never-used account also reports "Workspace not trusted", which would send
+ * the user to fix the wrong thing.
+ */
+async function peerLoggedIn(cfg, peer) {
+  const f = path.join(paths.state(), `auth-${peer}.json`);
+  const cached = readJSON(f, null);
+  const dir = normalizeDir(cfg.peers[peer].config_dir);
+  if (cached && cached.ok && cached.dir === dir && Date.now() - cached.at < 10 * 60 * 1000) return true;
+  const st = await authStatus(cfg.peers[peer].config_dir);
+  if (st && st.loggedIn) { try { writeJSONAtomic(f, { ok: true, dir, at: Date.now() }); } catch { /* */ } return true; }
+  return false;
+}
+
+export function loginHint(cfg, peer) {
+  return `Account ${label(cfg, peer)} is not logged in on this Mac. Ask the user to open a new terminal, run: claude-${peer.toLowerCase()} — then type /login, sign in with that account, and type /exit. The message stays queued and is delivered automatically once that account starts a session.`;
+}
+
 async function tryBackground(cfg, msg) {
   const peer = msg.to;
   const configDir = cfg.peers[peer].config_dir;
   const cwd = cwdFor(msg);
+  if (!(await peerLoggedIn(cfg, peer))) return { ok: false, error: 'auth_required', hint: loginHint(cfg, peer) };
   const trusted = isTrusted(configDir, cwd);
   if (trusted === false) return { ok: false, error: 'workspace_not_trusted', hint: `Account ${label(cfg, peer)} has not trusted the folder ${cwd} yet. Ask the user to run, once, in a terminal: cd ${cwd} && claude-${peer.toLowerCase()} — choose "Yes" when asked to trust the folder, then /exit. After that, resend.` };
   const prompt = bootstrap(cfg, msg);
@@ -149,7 +170,12 @@ async function tryBackground(cfg, msg) {
     pluginDir: cfg.dev && cfg.dev.plugin_dir ? normalizeDir(cfg.dev.plugin_dir) : null,
     allowedTools: [...cfg.spawn.allowed_tools, DUO_MCP_RULE],
   });
-  if (!r.ok) return { ok: false, error: r.error, raw: r.raw };
+  if (!r.ok) {
+    const hint = r.error === 'auth_required' ? loginHint(cfg, peer)
+      : r.error === 'workspace_not_trusted' ? `Account ${label(cfg, peer)} has not trusted the folder ${cwd} yet. Ask the user to run, once, in a terminal: cd ${cwd} && claude-${peer.toLowerCase()} — choose "Yes" when asked to trust the folder, then /exit.`
+        : undefined;
+    return { ok: false, error: r.error, raw: r.raw, hint };
+  }
   await refreshBgSession(cfg, peer, r.id, cwd);
   return { ok: true, via: 'background', bg_id: r.id };
 }
@@ -175,18 +201,27 @@ async function deliverWork(cfg, msg) {
     try { r = await TRY[m](cfg, msg); } catch (e) { r = { ok: false, error: 'exception', raw: String(e && e.stack || e).slice(0, 500) }; }
     record(msg.id, { mode: m, ok: !!r.ok, queued: !!r.queued, error: r.error || null, via: r.via || null });
     if (r.ok) {
-      record(msg.id, { event: 'delivered' }, { status: 'delivered', error: null, meta: { delivered_via: r.via, bg_id: r.bg_id || msg.meta.bg_id || null, live_session: r.session || null } });
+      record(msg.id, { event: 'delivered' }, { status: 'delivered', error: null, meta: { delivered_via: r.via, bg_id: r.bg_id || msg.meta.bg_id || null, live_session: r.session || null, hard_failure: false } });
       return r;
     }
     if (r.queued) {
-      record(msg.id, { event: 'queued' }, { error: r.error, meta: { queued_reason: r.error, queued_mode: m } });
-      if (r.hint && cfg.notify) notify('claude-duo', r.hint);
+      record(msg.id, { event: 'queued' }, { error: r.error, meta: { queued_reason: r.error, queued_mode: m, hard_failure: false } });
+      if (r.hint && cfg.notify && msg.meta.queued_reason !== r.error) notify('claude-duo', r.hint);
       return r;
     }
     last = r;
   }
-  record(msg.id, { event: 'failed' }, { error: last ? last.error : 'unknown' });
-  if (cfg.notify) notify('claude-duo: not delivered', `${msg.id}: ${last && last.error ? last.error : 'unknown'}`);
+  // Hard failure (not logged in, folder not trusted, launch failed…): the
+  // message stays queued; kick() retries it rarely, or as soon as the target
+  // peer starts a session. Notify only the first time.
+  const err = last ? last.error : 'unknown';
+  record(msg.id, { event: 'failed' }, { error: err, meta: { queued_reason: err, queued_mode: null, hard_failure: true, failure_notified: true, last_hint: last && last.hint ? last.hint : null } });
+  if (cfg.notify && !msg.meta.failure_notified) {
+    const short = err === 'auth_required' ? `${label(cfg, msg.to)} is not logged in. Run claude-${msg.to.toLowerCase()} then /login.`
+      : err === 'workspace_not_trusted' ? `${label(cfg, msg.to)} has not trusted ${cwdFor(msg)}. Run claude-${msg.to.toLowerCase()} there once.`
+        : `${msg.id}: ${err}`;
+    notify('claude-duo: not delivered yet', short);
+  }
   return last || { ok: false, error: 'unknown' };
 }
 
@@ -226,26 +261,40 @@ export async function deliver(cfg, id) {
  * Fire-and-forget retry of queued messages (used by hooks, which must stay
  * fast). Throttled via state/kick.json.
  */
-export function kickDetached(minIntervalMs = 20000) {
+/**
+ * Fire-and-forget retry of queued messages (used by hooks, which must stay
+ * fast). Throttled via state/kick*.json. With `peer`, that peer just started a
+ * session: its messages are retried right away, even after a hard failure.
+ */
+export function kickDetached(minIntervalMs = 20000, peer = null) {
   if (process.env.DUO_DRY_RUN === '1') return false;
   try {
-    const f = path.join(paths.state(), 'kick.json');
+    const f = path.join(paths.state(), peer ? `kick-${peer}.json` : 'kick.json');
     const last = readJSON(f, { at: 0 }).at || 0;
-    if (Date.now() - last < minIntervalMs) return false;
+    if (Date.now() - last < (peer ? 5000 : minIntervalMs)) return false;
     writeJSONAtomic(f, { at: Date.now() });
-    const child = spawn(process.execPath, [DUO_CLI, 'kick'], { detached: true, stdio: 'ignore', env: process.env });
+    const child = spawn(process.execPath, [DUO_CLI, 'kick', ...(peer ? ['--peer', peer] : [])], { detached: true, stdio: 'ignore', env: process.env });
     child.unref();
     return true;
   } catch (e) { log('kick-failed', e.message); return false; }
 }
 
-/** Retry delivery of queued work messages whose last attempt is old enough. */
-export async function kick(cfg, { minAgeMs = 15000 } = {}) {
+const HARD_RETRY_MS = 10 * 60 * 1000;
+
+/**
+ * Retry delivery of queued work messages. Transient reasons (peer busy…) are
+ * retried after minAgeMs; hard failures (not logged in, not trusted…) only
+ * every 10 minutes — unless `peer` is the target (it just started a session).
+ */
+export async function kick(cfg, { minAgeMs = 15000, peer = null } = {}) {
   const out = [];
   for (const m of listMessages({ boxes: ['new'], statuses: ['queued'] })) {
     if (isNoteLike(m)) continue;
+    const claimed = m.meta.claimed_by;
+    if (claimed && listSessions(m.to).some((s) => s.session_id === claimed)) continue; // a live session took it
     const lastAt = (m.meta.delivery_log || []).map((e) => Date.parse(e.at)).filter(Boolean).pop() || 0;
-    if (Date.now() - lastAt < minAgeMs) continue;
+    const wait = peer && m.to === peer ? 0 : m.meta.hard_failure ? HARD_RETRY_MS : minAgeMs;
+    if (Date.now() - lastAt < wait) continue;
     out.push({ id: m.id, r: await deliver(cfg, m.id) });
   }
   return out;

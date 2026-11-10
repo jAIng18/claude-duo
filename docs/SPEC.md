@@ -654,3 +654,13 @@ claude-duo/                         ← repo = marketplace "claude-duo"
 - **Mặc định chạy nền, không bật cửa sổ:** `delivery = { A_to_B: background, B_to_A: background, fallback: none }`. Giá trị mới `fallback: "none"` nghĩa là không chuyển sang mode khác. Khi không giao được (ví dụ `workspace_not_trusted`), lỗi kèm gợi ý được trả về cho Claude gửi để giải thích cho người dùng, và có thông báo macOS.
 - **Gửi xong thì chờ:** mô tả `duo_send` và skill hướng dẫn Claude gọi `duo_wait` ngay sau khi gửi, rồi báo kết quả cho người dùng. `duo_wait` mặc định 300 giây, tối đa 1800 giây; hết giờ thì kết quả vẫn được đưa về phiên đó khi xong.
 - Chạy thật với plugin đã cài (2 tài khoản thật): A→B background 11 giây, B→A background 21 giây, không mở cửa sổ nào; transcript của B xác nhận câu nhắc, task và câu trả lời đều bằng tiếng Anh. 41/41 test.
+
+### 18.6 Tài khoản thứ hai chưa đăng nhập (2026-11-10)
+- **Lỗi phát hiện khi thử:** với một config dir chưa từng đăng nhập, `claude --bg` báo `Workspace not trusted` (Claude Code kiểm tra tin cậy thư mục trước đăng nhập), nên repo báo sai lý do. Ngoài ra tin giao không được bị `kick` thử lại khoảng 20 giây một lần, mỗi lần kèm một thông báo macOS.
+- **Đã sửa:**
+  - Trước khi chạy nền, dispatcher kiểm tra đăng nhập bằng `claude auth status` (kết quả "đã đăng nhập" được lưu tạm 10 phút trong `state/auth-<peer>.json`). Không bao giờ gọi lệnh này với config dir chưa tồn tại, vì nó sẽ tạo thư mục đó. Chưa đăng nhập thì trả `auth_required` kèm hướng dẫn `claude-b` → `/login`.
+  - Lỗi cứng (`auth_required`, `workspace_not_trusted`, `launch_failed`…): message giữ `queued` với `meta.hard_failure = true`, chỉ thông báo **một lần**, và `kick` thử lại tối đa **10 phút một lần**. Lỗi tạm thời (peer bận…) vẫn thử lại sau 15 giây.
+  - Hook `SessionStart` chạy `duo kick --peer <me>`: khi tài khoản vừa mở phiên (ví dụ ngay sau `/login`), mọi message đang chờ cho nó được giao lại **ngay**.
+  - Chống xử lý trùng: `duo_get` / `duo_reply` từ chối nếu message đang được một phiên **còn sống** khác của cùng tài khoản xử lý. Phiên đó đã chết thì phiên mới tiếp quản. `kick` bỏ qua message đã được một phiên còn sống nhận.
+- **Đã kiểm:** gửi cho B chưa đăng nhập → `auth_required` đúng hướng dẫn, không tạo thư mục, `kick` thường bỏ qua, `kick --peer B` thử lại ngay. Sau khi B "đăng nhập" (trỏ sang tài khoản thật), `kick --peer B` giao tự động và nhận "pong", không cần gửi lại.
+
