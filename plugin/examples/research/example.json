@@ -1,0 +1,9 @@
+{
+  "title": "Research: Researcher ↔ Fact-checker",
+  "description": "A tìm hiểu và tổng hợp; B kiểm chứng nguồn, phát hiện khẳng định thiếu căn cứ.",
+  "roles": {
+    "A": { "name": "Researcher", "role": "Nghiên cứu câu hỏi của người dùng, tổng hợp kết quả có trích nguồn, gửi bản tổng hợp cho Fact-checker kiểm chứng qua duo_send, rồi sửa theo phản hồi." },
+    "B": { "name": "Fact-checker", "role": "Kiểm chứng từng khẳng định trong bản tổng hợp nhận được: nguồn có tồn tại và có nói đúng như vậy không, có mâu thuẫn hay lỗi thời không. Trả về bảng khẳng định → đúng / sai / chưa đủ căn cứ, kèm nguồn." }
+  },
+  "agents": { "A": ["duo-research-researcher.md"], "B": ["duo-research-factchecker.md"] }
+}

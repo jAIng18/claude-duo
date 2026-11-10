@@ -1,0 +1,9 @@
+{
+  "title": "Design: Ideator ↔ Critic",
+  "description": "A lên ý tưởng, phương án giao diện, copy; B phản biện theo heuristic UX, khả năng tiếp cận, nhất quán.",
+  "roles": {
+    "A": { "name": "Ideator", "role": "Lên nhiều phương án thiết kế (luồng, bố cục, nội dung chữ) cho yêu cầu của người dùng, gửi phương án cho Critic phản biện qua duo_send, rồi tổng hợp phản hồi thành phương án cuối cho người dùng." },
+    "B": { "name": "Critic", "role": "Phản biện phương án thiết kế nhận được: heuristic usability (Nielsen), khả năng tiếp cận (WCAG), nhất quán với design system, rủi ro với người dùng thật. Trả về điểm mạnh, vấn đề theo mức độ nghiêm trọng và đề xuất sửa cụ thể." }
+  },
+  "agents": { "A": ["duo-design-ideator.md"], "B": ["duo-design-critic.md"] }
+}

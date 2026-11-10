@@ -1,0 +1,7 @@
+{
+  "name": "duo",
+  "version": "0.4.0",
+  "description": "claude-duo: cho 2 tài khoản Claude Code trên cùng một máy macOS giao việc, hỏi đáp và trả kết quả cho nhau (chạy nền, mở cửa sổ mới, hoặc gõ thẳng vào phiên đang mở).",
+  "author": { "name": "claude-duo team" },
+  "keywords": ["multi-account", "orchestration", "delegation", "macos", "tmux"]
+}

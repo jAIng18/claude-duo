@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/duo.mjs\" hook SessionStart", "timeout": 15 }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/duo.mjs\" hook UserPromptSubmit", "timeout": 15 }] }],
+    "Notification":     [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/duo.mjs\" hook Notification", "timeout": 15 }] }],
+    "Stop":             [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/duo.mjs\" hook Stop", "timeout": 30 }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/duo.mjs\" hook SessionEnd", "timeout": 15 }] }]
+  }
+}

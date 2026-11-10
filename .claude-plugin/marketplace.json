@@ -1,0 +1,13 @@
+{
+  "name": "claude-duo",
+  "owner": { "name": "claude-duo team" },
+  "description": "claude-duo: 2 tài khoản Claude Code trên cùng một máy macOS giao việc và trả kết quả cho nhau.",
+  "plugins": [
+    {
+      "name": "duo",
+      "source": "./plugin",
+      "description": "Hộp thư, MCP tools, hooks và lệnh /duo:* để 2 phiên Claude Code (2 tài khoản) làm việc với nhau.",
+      "version": "0.4.0"
+    }
+  ]
+}
