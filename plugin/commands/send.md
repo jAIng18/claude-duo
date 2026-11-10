@@ -1,12 +1,12 @@
 ---
-description: Soạn và gửi việc / câu hỏi cho tài khoản Claude còn lại
-argument-hint: <việc cần giao hoặc câu hỏi>
+description: Write and send a task or question to the other Claude account
+argument-hint: <work to hand over, or a question>
 ---
-Người dùng muốn gửi cho peer Claude còn lại (tài khoản kia) nội dung sau:
+The user wants to send this to the other Claude peer (the other account):
 
 $ARGUMENTS
 
-Làm theo skill duo-protocol:
-1. Viết lại thành một message **tự chứa ngữ cảnh** (bên kia không thấy cuộc trò chuyện này): tiêu đề ngắn, mục tiêu, bối cảnh, file liên quan (đường dẫn tuyệt đối), ràng buộc, tiêu chí hoàn thành. Chọn `type` phù hợp (task / question / info).
-2. Cho người dùng xem bản nháp và hỏi có gửi không. Chỉ khi họ đồng ý mới gọi `duo_send` (kèm `user_confirmed: true`).
-3. Báo lại id message và tình trạng giao nhận. Nếu chưa giao được, giải thích lý do bằng lời dễ hiểu và cách khắc phục.
+Follow the duo-protocol skill:
+1. Rewrite it as a **self-contained message in English** (the other peer cannot see this conversation): short title, goal, context, relevant files (absolute paths), constraints, acceptance criteria. Pick the right `type` (task / question / info).
+2. Show the user the draft (explain it in their language if they do not write English) and ask whether to send it. Call `duo_send` with `user_confirmed: true` only if they agree.
+3. Then call `duo_wait` with the message id and report the result to the user in their language. If it times out, tell them it is still running and the result will appear here when it is done. If the message could not be delivered, explain why in plain words and how to fix it.

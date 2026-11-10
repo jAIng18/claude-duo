@@ -56,7 +56,15 @@ test('config validation catches bad values', () => {
   assert.ok(errs.some((e) => e.includes('delivery.A_to_B')));
   assert.ok(errs.some((e) => e.includes('allowed_tools')));
   const same = C.deepMerge(C.defaultConfig(), { peers: { B: { config_dir: '~/.claude/' } } });
-  assert.ok(C.validate(same).some((e) => e.includes('cùng một config_dir')));
+  assert.ok(C.validate(same).some((e) => e.includes('same config_dir')));
+});
+
+test('defaults: background both ways, no fallback window; fallback may be none, directions may not', () => {
+  const d = C.defaultConfig();
+  assert.deepEqual(d.delivery, { A_to_B: 'background', B_to_A: 'background', fallback: 'none' });
+  assert.deepEqual(C.validate(d), []);
+  assert.ok(C.validate(C.deepMerge(d, { delivery: { A_to_B: 'none' } })).some((e) => e.includes('delivery.A_to_B')));
+  assert.deepEqual(C.validate(C.deepMerge(d, { delivery: { fallback: 'new-tab' } })), []);
 });
 
 test('whoAmI maps CLAUDE_CONFIG_DIR to the peer', () => {
@@ -113,7 +121,7 @@ test('send → get → reply(done) produces a result for the sender', async () =
 
 test('approval before_send=ask requires user_confirmed', async () => {
   const c2 = C.deepMerge(cfg, { approval: { before_send: 'ask' } });
-  await assert.rejects(A.send(c2, 'A', SID_A, { type: 'task', title: 't', body: 'b' }, { deliverNow: false }), (e) => e.code === 'approval_required' && e.message.includes('Tiêu đề: t'));
+  await assert.rejects(A.send(c2, 'A', SID_A, { type: 'task', title: 't', body: 'b' }, { deliverNow: false }), (e) => e.code === 'approval_required' && e.message.includes('Title: t'));
   const ok = await A.send(c2, 'A', SID_A, { type: 'task', title: 't', body: 'b', user_confirmed: true }, { deliverNow: false });
   assert.equal(ok.message.status, 'queued');
 });
@@ -207,7 +215,7 @@ const PLACEHOLDER = [`${RULE} duo ─`, '❯ Try "fix lint errors"', RULE, '  �
 const DIALOG = ['⏺ Write(duo-perm-test.txt)', RULE, ' Create file', ' duo-perm-test.txt', '╌'.repeat(40), '  1 hello', '╌'.repeat(40),
   ' Do you want to create duo-perm-test.txt?', ' ❯ 1. Yes', '   2. Yes, and switch to accept edits', '   3. No', ' Esc to cancel · Tab to amend', `${RULE} duo-tmux-test ─`].join('\n');
 const TALKY = ['⏺ Do you want to proceed with option 1?', `${RULE} x ─`, '❯ ', RULE, '  status'].join('\n');
-const TYPED = [`${RULE} x ─`, '❯ [claude-duo] Ban co TASK moi', '  20261110-010101-abcd', RULE, '  status'].join('\n');
+const TYPED = [`${RULE} x ─`, '❯ [claude-duo] New TASK', '  20261110-010101-abcd', RULE, '  status'].join('\n');
 
 test('analyzeScreen: idle prompt', () => {
   assert.deepEqual(T.analyzeScreen(IDLE), { ok: true, inputText: '' });
@@ -222,7 +230,7 @@ test('analyzeScreen: Claude text mentioning "Do you want to" above the box is fi
 test('analyzeScreen: wrapped typed input is read back', () => {
   const a = T.analyzeScreen(TYPED);
   assert.equal(a.ok, true);
-  assert.ok(a.inputText.replace(/\s+/g, '').includes('[claude-duo]BancoTASKmoi20261110'));
+  assert.ok(a.inputText.replace(/\s+/g, '').includes('[claude-duo]NewTASK20261110'));
 });
 
 // ------------------------------------------------------------------ claude CLI wrappers

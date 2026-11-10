@@ -43,7 +43,7 @@ test('SessionStart registers the session and announces identity + pending work',
 
 test('UserPromptSubmit with a bootstrap prompt marks the message picked up and busy', async () => {
   const { message } = await A.send(cfg, 'A', SID_A, { type: 'task', title: 'pick me', body: 'b' }, { deliverNow: false });
-  hook('UserPromptSubmit', { ...base(), prompt: `[claude-duo] Ban co TASK moi ${message.id} tu A:Planner: "pick me".` });
+  hook('UserPromptSubmit', { ...base(), prompt: `[claude-duo] New TASK ${message.id} from A:Planner: "pick me".` });
   const m = M.getMessage(message.id);
   assert.equal(m.meta.picked_up_by, SID_B);
   assert.equal(m.status, 'delivered');
@@ -62,7 +62,7 @@ test('Stop picks up a queued message and blocks with its bootstrap (once per mes
   assert.ok(pending.length >= 1);
   const out = hook('Stop', { ...base(), stop_hook_active: false, last_assistant_message: 'ok' });
   assert.equal(out.decision, 'block');
-  assert.match(out.reason, /^\[claude-duo\] Ban co TASK moi/);
+  assert.match(out.reason, /^\[claude-duo\] New TASK /);
   const id = out.reason.match(/\d{8}-\d{6}-[a-z0-9]{4}/)[0];
   assert.equal(M.getMessage(id).meta.claimed_by, SID_B);
   // the same message is not announced twice to the same session
@@ -89,7 +89,7 @@ test('Stop reminds about duo_reply for background work, then auto-replies', asyn
   hook('SessionStart', { ...base(SID), source: 'startup' });
   const r1 = hook('Stop', { ...base(SID), stop_hook_active: false, last_assistant_message: 'đã làm xong phần 1' });
   assert.equal(r1.decision, 'block');
-  assert.match(r1.reason, /chưa gọi duo_reply/);
+  assert.match(r1.reason, /have not called duo_reply/);
   const r2 = hook('Stop', { ...base(SID), stop_hook_active: true, last_assistant_message: 'đã làm xong phần 1' });
   assert.equal(r2.decision, 'block');
   hook('Stop', { ...base(SID), stop_hook_active: true, last_assistant_message: 'KẾT QUẢ CUỐI' });
@@ -158,7 +158,7 @@ test('MCP: handshake, tools/list, unknown method, tool calls', async () => {
     assert.equal(JSON.parse(st.result.content[0].text).me, 'A');
     const sent = await s.call('tools/call', { name: 'duo_send', arguments: { type: 'info', title: 'xin chào', body: 'thử' } });
     assert.ok(!sent.result.isError, sent.result.content[0].text);
-    assert.match(sent.result.content[0].text, /Đã tạo \d{8}-\d{6}-[a-z0-9]{4} → B:Maker/);
+    assert.match(sent.result.content[0].text, /Created \d{8}-\d{6}-[a-z0-9]{4} → B:Maker/);
     const bad = await s.call('tools/call', { name: 'duo_get', arguments: { id: '20000101-000000-zzzz' } });
     assert.equal(bad.result.isError, true);
     const cfgSet = await s.call('tools/call', { name: 'duo_config', arguments: { action: 'set', key: 'spawn.permission_mode', value: 'bypassPermissions', user_confirmed: true } });

@@ -648,3 +648,9 @@ claude-duo/                         ← repo = marketplace "claude-duo"
 - Thử với người dùng thật (1 dev, 1 designer, 1 PM). Thêm ảnh chụp vào README.
 - iTerm2: code đã có nhưng **chưa kiểm thử** (máy dev không cài iTerm2).
 - Lưới an toàn nhắc `duo_reply` mới được kiểm qua unit test (E2E-4 không kích hoạt vì Claude đã tự reply).
+
+### 18.5 Thay đổi v0.5 (2026-11-10, theo phản hồi sau khi chạy thật)
+- **Hai Claude trao đổi bằng tiếng Anh.** Mọi chữ mà Claude đọc (câu nhắc, system prompt bổ sung, mô tả và kết quả của tool MCP, thông điệp hook, skill, lệnh `/duo:*`, vai trò mẫu) đã chuyển sang tiếng Anh. Claude được dặn viết `duo_send` / `duo_reply` bằng tiếng Anh, nhưng nói với người dùng bằng ngôn ngữ của họ. CLI `duo` và `duo doctor` (cho người đọc) vẫn bằng tiếng Việt.
+- **Mặc định chạy nền, không bật cửa sổ:** `delivery = { A_to_B: background, B_to_A: background, fallback: none }`. Giá trị mới `fallback: "none"` nghĩa là không chuyển sang mode khác. Khi không giao được (ví dụ `workspace_not_trusted`), lỗi kèm gợi ý được trả về cho Claude gửi để giải thích cho người dùng, và có thông báo macOS.
+- **Gửi xong thì chờ:** mô tả `duo_send` và skill hướng dẫn Claude gọi `duo_wait` ngay sau khi gửi, rồi báo kết quả cho người dùng. `duo_wait` mặc định 300 giây, tối đa 1800 giây; hết giờ thì kết quả vẫn được đưa về phiên đó khi xong.
+- Chạy thật với plugin đã cài (2 tài khoản thật): A→B background 11 giây, B→A background 21 giây, không mở cửa sổ nào; transcript của B xác nhận câu nhắc, task và câu trả lời đều bằng tiếng Anh. 41/41 test.

@@ -1,20 +1,20 @@
 ---
-description: Thiết lập claude-duo (tên, vai trò, cách giao nhận giữa 2 tài khoản)
+description: Set up claude-duo (names, roles, how the two accounts hand work to each other)
 ---
-Bạn đang giúp người dùng thiết lập **claude-duo** — cho 2 tài khoản Claude Code trên máy này giao việc cho nhau. Nói chuyện bằng tiếng Việt, ngắn gọn, mỗi lần hỏi tối đa 2–3 câu. Người dùng có thể không phải dev: tránh thuật ngữ, giải thích bằng ví dụ.
+You are helping the user set up **claude-duo**, which lets the two Claude Code accounts on this Mac hand work to each other. Talk to the user in **their** language, briefly, at most 2–3 questions at a time. The user may not be a developer: avoid jargon and use examples. Everything you write into the configuration (names, roles) must be in **English**, because the two peers talk to each other in English.
 
-Các bước:
+Steps:
 
-1. Gọi `duo_config` với `action: "get"`. Nếu đã có cấu hình, tóm tắt hiện trạng và hỏi người dùng muốn đổi gì (rồi dùng `action: "set"`). Nếu chưa có, làm tiếp các bước dưới.
-2. Hỏi: tài khoản thứ hai dùng thư mục config nào (mặc định `~/.claude-b`; tài khoản hiện tại là `~/.claude`). Thường giữ mặc định.
-3. Hỏi mục đích dùng và vai trò của A và B. Gợi ý các bộ mẫu bằng `duo_examples` (`action: "list"`) — ví dụ Dev (planner ↔ coder), Design (ideator ↔ critic), PM (prd-writer ↔ reviewer), Research. Hoặc để họ tự mô tả vai trò.
-4. Hỏi cách bên nhận làm việc, cho TỪNG chiều (A→B và B→A), giải thích:
-   - **new-tab** (khuyên dùng lúc đầu): mở cửa sổ Terminal mới để bạn xem nó làm.
-   - **background**: chạy ngầm, chỉ báo kết quả; bên nhận nhớ được các việc trước. Cần bên nhận đã từng mở thư mục làm việc một lần để "tin cậy" thư mục.
-   - **live-session**: gõ thẳng vào cửa sổ của bên kia đang mở (mở bằng `claude-a` / `claude-b`).
-5. Hỏi có muốn **duyệt trước khi gửi** không (mặc định: có).
-6. Trình bày bảng tóm tắt cấu hình sẽ tạo. Khi người dùng đồng ý, gọi `duo_config` với `action: "init"`, `user_confirmed: true`, `values` = các giá trị đã chọn (ví dụ `{"peers":{"A":{"name":"Planner","role":"..."},"B":{"name":"Maker","role":"...","config_dir":"~/.claude-b"}},"delivery":{"A_to_B":"new-tab","B_to_A":"background","fallback":"new-tab"},"approval":{"before_send":"ask","before_accept":"auto"}}`).
-7. Nếu họ chọn một bộ mẫu: gọi `duo_examples` với `action: "install"`, `name`, `user_confirmed: true`.
-8. Kết thúc: nhắc họ chạy `/duo:test` để kiểm tra, và nếu tài khoản thứ hai chưa đăng nhập thì mở terminal mới gõ `claude-b` rồi `/login`.
+1. Call `duo_config` with `action: "get"`. If a configuration exists, summarise it and ask what to change (then use `action: "set"`). Otherwise continue.
+2. Ask which config folder the second account uses (default `~/.claude-b`; the current account is `~/.claude`). Usually keep the default.
+3. Ask what they want to use it for and the roles of A and B. Offer the example packs from `duo_examples` (`action: "list"`) — e.g. Dev (planner ↔ coder), Design (ideator ↔ critic), PM (PRD writer ↔ reviewer), Research — or let them describe the roles themselves (you write the role text in English).
+4. Explain how the receiving side runs, per direction (A→B and B→A):
+   - **background** (default, recommended): runs silently, no extra windows; the result comes back to the conversation that asked. It remembers earlier tasks. The receiving account must have trusted the working folder once.
+   - **new-tab**: opens a new Terminal window so the user can watch it work.
+   - **live-session**: types the task into the other account's window that is already open (started with `claude-a` / `claude-b`).
+5. Ask whether they want to **approve each message before it is sent** (default: yes).
+6. Show a summary table of the configuration. When the user agrees, call `duo_config` with `action: "init"`, `user_confirmed: true`, `values` = the chosen values (e.g. `{"peers":{"A":{"name":"Planner","role":"..."},"B":{"name":"Maker","role":"...","config_dir":"~/.claude-b"}},"delivery":{"A_to_B":"background","B_to_A":"background","fallback":"none"},"approval":{"before_send":"ask","before_accept":"auto"}}`).
+7. If they chose an example pack: call `duo_examples` with `action: "install"`, `name`, `user_confirmed: true`.
+8. Finish by suggesting `/duo:test`. If the second account is not logged in yet: open a new terminal, run `claude-b`, then `/login`. For background mode, the second account must trust each working folder once: `cd <folder> && claude-b`, answer "Yes", then `/exit`.
 
-Không bao giờ đặt `spawn.permission_mode` thành `bypassPermissions`.
+Never set `spawn.permission_mode` to `bypassPermissions`.

@@ -1,9 +1,22 @@
 {
   "title": "PM: PRD Writer ↔ Reviewer",
-  "description": "A viết PRD / user story từ ý tưởng; B phản biện (red-team): giả định, edge case, chỉ số đo lường.",
+  "description": "A turns ideas into PRDs and user stories; B red-teams them: assumptions, edge cases, metrics.",
   "roles": {
-    "A": { "name": "PRD Writer", "role": "Biến ý tưởng của người dùng thành PRD gọn: vấn đề, mục tiêu, người dùng, phạm vi, user story kèm acceptance criteria, chỉ số thành công. Gửi bản nháp cho Reviewer qua duo_send rồi cập nhật theo phản hồi." },
-    "B": { "name": "PRD Reviewer", "role": "Phản biện PRD nhận được: giả định chưa kiểm chứng, edge case, rủi ro, phụ thuộc, chỉ số đo lường có đo được không. Trả về danh sách vấn đề theo mức độ ưu tiên và câu hỏi cần làm rõ." }
+    "A": {
+      "name": "PRD Writer",
+      "role": "Turns the user's idea into a lean PRD: problem, goals, users, scope, user stories with acceptance criteria, success metrics. Sends the draft to the Reviewer with duo_send and updates it from the feedback."
+    },
+    "B": {
+      "name": "PRD Reviewer",
+      "role": "Red-teams the PRDs it receives: unverified assumptions, edge cases, risks, dependencies, whether metrics are measurable. Returns prioritised issues and clarifying questions."
+    }
   },
-  "agents": { "A": ["duo-pm-writer.md"], "B": ["duo-pm-reviewer.md"] }
+  "agents": {
+    "A": [
+      "duo-pm-writer.md"
+    ],
+    "B": [
+      "duo-pm-reviewer.md"
+    ]
+  }
 }

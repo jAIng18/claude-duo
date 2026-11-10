@@ -49,9 +49,9 @@ function fileFor(peer, status, id) {
 export function createMessage(fields) {
   const now = new Date().toISOString();
   if (!PEERS.includes(fields.from) || !PEERS.includes(fields.to) || fields.from === fields.to) {
-    throw new DuoError('bad_peer', `from/to không hợp lệ: ${fields.from} → ${fields.to}`);
+    throw new DuoError('bad_peer', `invalid from/to: ${fields.from} → ${fields.to}`);
   }
-  if (!TYPES.includes(fields.type)) throw new DuoError('bad_type', `type không hợp lệ: ${fields.type}`);
+  if (!TYPES.includes(fields.type)) throw new DuoError('bad_type', `invalid type: ${fields.type}`);
   const id = fields.id || newId();
   const initial = WORK_TYPES.includes(fields.type) ? 'queued' : 'unread';
   let body = String(fields.body ?? '');
@@ -61,7 +61,7 @@ export function createMessage(fields) {
     const f = path.join(dir, 'body.md');
     fs.writeFileSync(f, body, { mode: 0o600 });
     meta.body_file = f;
-    body = `(Nội dung dài ${Buffer.byteLength(body, 'utf8')} byte, đã lưu tại file: ${f} — hãy đọc file này.)`;
+    body = `(Long content, ${Buffer.byteLength(body, 'utf8')} bytes, stored in the file ${f} — read that file.)`;
   }
   const msg = {
     id,
@@ -115,7 +115,7 @@ export function getMessage(id) {
 
 export function requireMessage(id) {
   const m = getMessage(id);
-  if (!m) throw new DuoError('not_found', `Không tìm thấy message ${id}`);
+  if (!m) throw new DuoError('not_found', `Message ${id} not found`);
   return m;
 }
 
@@ -123,7 +123,7 @@ export function requireMessage(id) {
 export function updateMessage(id, fn) {
   return withLock(`msg-${id}`, () => {
     const hit = locate(id);
-    if (!hit) throw new DuoError('not_found', `Không tìm thấy message ${id}`);
+    if (!hit) throw new DuoError('not_found', `Message ${id} not found`);
     const before = hit.msg;
     const draft = structuredClone(before);
     const out = fn(draft) || draft;
@@ -187,7 +187,7 @@ export function ensureMailDirs() {
 
 /** One-line summary used in inboxes, hook context and notifications. */
 export function summary(m) {
-  const t = { task: 'task', question: 'câu hỏi', result: 'kết quả', info: 'thông báo', cancel: 'hủy' }[m.type] || m.type;
+  const t = m.type;
   const st = m.type === 'result' && m.result?.status ? ` [${m.result.status}]` : '';
-  return `${m.id} · ${t}${st} ${m.from}→${m.to} · ${m.title || '(không tiêu đề)'} · ${m.status}`;
+  return `${m.id} · ${t}${st} ${m.from}→${m.to} · ${m.title || '(no title)'} · ${m.status}`;
 }

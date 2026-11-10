@@ -116,7 +116,7 @@ async function tryBackground(cfg, msg) {
   const configDir = cfg.peers[peer].config_dir;
   const cwd = cwdFor(msg);
   const trusted = isTrusted(configDir, cwd);
-  if (trusted === false) return { ok: false, error: 'workspace_not_trusted', hint: `Mở ${label(cfg, peer)} trong ${cwd} một lần (alias claude-${peer.toLowerCase()}) và chọn Yes ở hộp thoại tin cậy thư mục.` };
+  if (trusted === false) return { ok: false, error: 'workspace_not_trusted', hint: `Account ${label(cfg, peer)} has not trusted the folder ${cwd} yet. Ask the user to run, once, in a terminal: cd ${cwd} && claude-${peer.toLowerCase()} — choose "Yes" when asked to trust the folder, then /exit. After that, resend.` };
   const prompt = bootstrap(cfg, msg);
   const bg = cfg.background.keep_context ? getBg(peer) : null;
   if (bg && bg.cwd === cwd && bg.session_id) {
@@ -126,7 +126,7 @@ async function tryBackground(cfg, msg) {
       return { ok: false, queued: true, error: 'worker_busy' };
     }
     if (entry && entry.pid && entry.state === 'blocked') {
-      return { ok: false, queued: true, error: 'worker_waiting_permission', hint: `Phiên nền của ${label(cfg, peer)} đang chờ bạn duyệt quyền: chạy \`duo attach ${peer}\`.` };
+      return { ok: false, queued: true, error: 'worker_waiting_permission', hint: `The background session of ${label(cfg, peer)} is waiting for a permission approval. Ask the user to run \`duo attach ${peer}\` to approve it.` };
     }
     if (entry && entry.pid) await stopBg(configDir, entry.id);
     const r = await resumeBg(configDir, bg.session_id, prompt, cwd);
@@ -165,8 +165,10 @@ const TRY = { 'live-session': (c, m) => tryLive(c, m, { queueIfBusy: true }), 'n
 /** Deliver a work message (task / new question). */
 async function deliverWork(cfg, msg) {
   let mode = msg.delivery || cfg.delivery[directionKey(msg.from, msg.to)];
+  // A background session has nobody to ask, so "ask before accepting" needs a visible window.
   if (mode === 'background' && cfg.approval.before_accept === 'ask') mode = 'new-tab';
-  const chain = [...new Set([mode, cfg.delivery.fallback])];
+  const fb = cfg.delivery.fallback;
+  const chain = fb && fb !== 'none' && fb !== mode ? [mode, fb] : [mode];
   let last = null;
   for (const m of chain) {
     let r;
@@ -184,14 +186,14 @@ async function deliverWork(cfg, msg) {
     last = r;
   }
   record(msg.id, { event: 'failed' }, { error: last ? last.error : 'unknown' });
-  if (cfg.notify) notify('claude-duo: chưa giao được', `${msg.id}: ${last && last.hint ? last.hint : last ? last.error : ''}`);
+  if (cfg.notify) notify('claude-duo: not delivered', `${msg.id}: ${last && last.error ? last.error : 'unknown'}`);
   return last || { ok: false, error: 'unknown' };
 }
 
 /** Wake the receiver for a note (result / info / needs_info question). */
 async function deliverNote(cfg, msg) {
   const peer = msg.to;
-  if (cfg.notify) notify(`claude-duo → ${label(cfg, peer)}`, `${msg.type === 'result' ? 'Kết quả' : msg.type === 'question' ? 'Câu hỏi' : 'Thông báo'} từ ${label(cfg, msg.from)}: ${msg.title}`);
+  if (cfg.notify) notify(`claude-duo → ${label(cfg, peer)}`, `${msg.type === 'result' ? 'Result' : msg.type === 'question' ? 'Question' : 'Notice'} from ${label(cfg, msg.from)}: ${msg.title}`);
   if (!cfg.wake_on_result) return { ok: true, via: 'mailbox' };
   // 1) the session that sent the original request, if it is a live tmux session
   const live = await tryLive(cfg, msg, { queueIfBusy: true });

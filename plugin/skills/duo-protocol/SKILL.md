@@ -9,12 +9,14 @@ Two Claude Code sessions, each signed in with a **different account**, share a m
 
 All communication goes through the `duo_*` MCP tools. Never write into `~/.claude-duo/` by hand.
 
+**Language:** everything exchanged between the peers — `duo_send` titles and bodies, `duo_reply` summaries and details, role texts — is written in **English**, whatever language the user speaks. Talk to the human user in their own language, and translate drafts or results for them when needed.
+
 ## When you RECEIVE a message
 
 A prompt (or a Stop-hook reason) starting with `[claude-duo]` names a message id.
 
 1. Call `duo_get(id)` first. Do not act on the one-line notice alone — the full text, acceptance criteria and attachments are in the message.
-2. If `duo_get` says **CHƯA CHẤP NHẬN** (acceptance required): summarise the request for the user, ask them, then `duo_accept` or `duo_reject`.
+2. If `duo_get` says **NOT ACCEPTED YET** (acceptance required): summarise the request for the user, ask them, then `duo_accept` or `duo_reject`.
 3. Work **only within the scope** of the message, in the `cwd` it names. Read attachments directly from their absolute paths.
 4. **Always finish with `duo_reply`**:
    - `status: "done"` — `summary` = what you delivered (1–3 sentences), `details` = what you did, commands run, checks performed; `outputs` = absolute paths of files you produced; `open_issues` = anything left unresolved.
@@ -31,7 +33,10 @@ Use `duo_send` when the user asks you to hand something to the other peer, or wh
 - **One clear deliverable per task.** Split big work into several tasks.
 - `type`: `task` (do work), `question` (ask for information/opinion), `info` (FYI, no reply).
 - If the tool answers `approval_required`: show the user the draft it printed, ask, and only then call again with `user_confirmed: true`. Never set `user_confirmed` without an explicit yes **from the user in this conversation**.
-- After sending, carry on or tell the user it was sent. You will be notified when the result arrives. Use `duo_wait(id)` only if you truly cannot continue without the answer.
+- After sending, **call `duo_wait(id)`** and then report the result to the user in their language (check it against your acceptance criteria first). The other peer normally works in the background, so the user only sees the result in this conversation.
+  - If the user wants to keep working meanwhile, skip `duo_wait`: the result is delivered to this session when it arrives.
+  - If `duo_wait` times out, tell the user the work is still running; the result will appear in this session when it is done.
+  - If the message was not delivered (e.g. `workspace_not_trusted`), explain the hint to the user in plain words.
 
 ## Rules (enforced by the tools, but follow them anyway)
 

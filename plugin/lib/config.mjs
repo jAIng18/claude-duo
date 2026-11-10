@@ -5,6 +5,8 @@ import { readJSON, writeJSONAtomic, ensureDir } from './fsutil.mjs';
 
 export const PEERS = ['A', 'B'];
 export const MODES = ['background', 'new-tab', 'live-session'];
+// fallback may also be 'none': never fall back to another mode (no pop-up windows).
+export const FALLBACKS = [...MODES, 'none'];
 export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions'];
 // Modes the setup wizard / duo_config tool may set. bypassPermissions is only
 // possible by editing the file by hand, and `duo doctor` warns about it.
@@ -16,10 +18,11 @@ export function defaultConfig() {
   return {
     version: 1,
     peers: {
-      A: { name: 'A', config_dir: '~/.claude', role: 'Lập kế hoạch, chia việc, review kết quả' },
-      B: { name: 'B', config_dir: '~/.claude-b', role: 'Thực thi task được giao, báo cáo chi tiết' },
+      A: { name: 'A', config_dir: '~/.claude', role: 'Plans the work, splits it into tasks, reviews results.' },
+      B: { name: 'B', config_dir: '~/.claude-b', role: 'Carries out the tasks it receives and reports back in detail.' },
     },
-    delivery: { A_to_B: 'new-tab', B_to_A: 'new-tab', fallback: 'new-tab' },
+    // Run the receiving side in the background and only report the result back.
+    delivery: { A_to_B: 'background', B_to_A: 'background', fallback: 'none' },
     background: { keep_context: true },
     new_tab: { reuse_live: true, use_tmux: true, activate: true },
     approval: { before_send: 'ask', before_accept: 'auto' },
@@ -57,28 +60,29 @@ export function deepMerge(base, over) {
 /** Returns a list of human-readable problems (empty = valid). */
 export function validate(cfg) {
   const errs = [];
-  if (!isObj(cfg)) return ['config không phải object'];
+  if (!isObj(cfg)) return ['config is not an object'];
   for (const p of PEERS) {
     const peer = cfg.peers && cfg.peers[p];
-    if (!isObj(peer)) { errs.push(`thiếu peers.${p}`); continue; }
-    if (typeof peer.config_dir !== 'string' || !peer.config_dir) errs.push(`peers.${p}.config_dir trống`);
-    if (typeof peer.name !== 'string' || !peer.name.trim()) errs.push(`peers.${p}.name trống`);
+    if (!isObj(peer)) { errs.push(`missing peers.${p}`); continue; }
+    if (typeof peer.config_dir !== 'string' || !peer.config_dir) errs.push(`peers.${p}.config_dir is empty`);
+    if (typeof peer.name !== 'string' || !peer.name.trim()) errs.push(`peers.${p}.name is empty`);
   }
   if (!errs.length && normalizeDir(cfg.peers.A.config_dir) === normalizeDir(cfg.peers.B.config_dir)) {
-    errs.push('peers.A và peers.B đang dùng cùng một config_dir');
+    errs.push('peers.A and peers.B use the same config_dir');
   }
-  for (const k of ['A_to_B', 'B_to_A', 'fallback']) {
-    if (!MODES.includes(cfg.delivery?.[k])) errs.push(`delivery.${k} phải là một trong: ${MODES.join(', ')}`);
+  for (const k of ['A_to_B', 'B_to_A']) {
+    if (!MODES.includes(cfg.delivery?.[k])) errs.push(`delivery.${k} must be one of: ${MODES.join(', ')}`);
   }
-  if (!['ask', 'auto'].includes(cfg.approval?.before_send)) errs.push('approval.before_send phải là ask|auto');
-  if (!['ask', 'auto'].includes(cfg.approval?.before_accept)) errs.push('approval.before_accept phải là ask|auto');
-  if (!PERMISSION_MODES.includes(cfg.spawn?.permission_mode)) errs.push(`spawn.permission_mode phải là một trong: ${PERMISSION_MODES.join(', ')}`);
+  if (!FALLBACKS.includes(cfg.delivery?.fallback)) errs.push(`delivery.fallback must be one of: ${FALLBACKS.join(', ')}`);
+  if (!['ask', 'auto'].includes(cfg.approval?.before_send)) errs.push('approval.before_send must be ask|auto');
+  if (!['ask', 'auto'].includes(cfg.approval?.before_accept)) errs.push('approval.before_accept must be ask|auto');
+  if (!PERMISSION_MODES.includes(cfg.spawn?.permission_mode)) errs.push(`spawn.permission_mode must be one of: ${PERMISSION_MODES.join(', ')}`);
   if (!Array.isArray(cfg.spawn?.allowed_tools) || cfg.spawn.allowed_tools.some((t) => typeof t !== 'string' || !t.trim() || t.includes(','))) {
-    errs.push('spawn.allowed_tools phải là mảng tên tool (không chứa dấu phẩy)');
+    errs.push('spawn.allowed_tools must be an array of tool names (no commas)');
   }
-  if (!TERMINAL_APPS.includes(cfg.terminal_app)) errs.push(`terminal_app phải là: ${TERMINAL_APPS.join(' | ')}`);
+  if (!TERMINAL_APPS.includes(cfg.terminal_app)) errs.push(`terminal_app must be: ${TERMINAL_APPS.join(' | ')}`);
   for (const [k, v] of Object.entries(cfg.limits || {})) {
-    if (!Number.isInteger(v) || v < 0) errs.push(`limits.${k} phải là số nguyên ≥ 0`);
+    if (!Number.isInteger(v) || v < 0) errs.push(`limits.${k} must be an integer ≥ 0`);
   }
   return errs;
 }
@@ -89,16 +93,16 @@ export function configExists() {
 
 export function loadConfig() {
   const raw = readJSON(paths.config(), null);
-  if (raw === null) throw new DuoError('not_configured', 'Chưa có cấu hình claude-duo. Chạy /duo:setup (hoặc `duo init`).');
+  if (raw === null) throw new DuoError('not_configured', 'claude-duo is not configured yet. Run /duo:setup (or `duo init`).');
   const cfg = deepMerge(defaultConfig(), raw);
   const errs = validate(cfg);
-  if (errs.length) throw new DuoError('invalid_config', `Cấu hình không hợp lệ (${paths.config()}):\n- ${errs.join('\n- ')}`);
+  if (errs.length) throw new DuoError('invalid_config', `Invalid configuration (${paths.config()}):\n- ${errs.join('\n- ')}`);
   return cfg;
 }
 
 export function saveConfig(cfg) {
   const errs = validate(cfg);
-  if (errs.length) throw new DuoError('invalid_config', `Cấu hình không hợp lệ:\n- ${errs.join('\n- ')}`);
+  if (errs.length) throw new DuoError('invalid_config', `Invalid configuration:\n- ${errs.join('\n- ')}`);
   ensureDir(paths.root());
   writeJSONAtomic(paths.config(), cfg);
 }
@@ -124,7 +128,7 @@ export function whoAmI(cfg, env = process.env) {
 export function requireMe(cfg, env = process.env) {
   const me = whoAmI(cfg, env);
   if (!me) {
-    throw new DuoError('unknown_peer', `Phiên này dùng config dir ${currentConfigDir(env)}, không khớp peer nào trong ${paths.config()}. Kiểm tra peers.A/B.config_dir.`);
+    throw new DuoError('unknown_peer', `This session uses config dir ${currentConfigDir(env)}, which matches no peer in ${paths.config()}. Check peers.A/B.config_dir.`);
   }
   return me;
 }

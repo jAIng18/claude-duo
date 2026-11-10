@@ -1,10 +1,10 @@
 ---
-description: Xem hoặc đổi cấu hình claude-duo bằng lời
-argument-hint: <thay đổi muốn làm, ví dụ "chuyển chiều A sang B thành chạy nền">
+description: View or change the claude-duo settings in plain words
+argument-hint: <change to make, e.g. "run B in the background">
 ---
-Yêu cầu của người dùng: $ARGUMENTS
+The user's request: $ARGUMENTS
 
-1. Gọi `duo_config` với `action: "get"` để xem cấu hình hiện tại.
-2. Nếu không có yêu cầu cụ thể: tóm tắt cấu hình bằng tiếng Việt dễ hiểu và hỏi muốn đổi gì.
-3. Nếu có: xác định key cần đổi (ví dụ `delivery.A_to_B`, `approval.before_send`, `peers.B.role`, `spawn.allowed_tools`, `terminal_app`), trình bày "trước → sau", hỏi người dùng. Khi họ đồng ý, gọi `duo_config` với `action: "set"`, `key`, `value`, `user_confirmed: true`.
-Không bao giờ đặt `spawn.permission_mode` thành `bypassPermissions`.
+1. Call `duo_config` with `action: "get"` to see the current configuration.
+2. If there is no specific request: summarise the configuration in the user's language and ask what to change.
+3. Otherwise: find the key(s) to change (e.g. `delivery.A_to_B`, `delivery.fallback`, `approval.before_send`, `peers.B.role`, `spawn.allowed_tools`, `terminal_app`), show "before → after", and ask the user. When they agree, call `duo_config` with `action: "set"`, `key`, `value`, `user_confirmed: true`. Role texts must be written in English.
+Never set `spawn.permission_mode` to `bypassPermissions`.

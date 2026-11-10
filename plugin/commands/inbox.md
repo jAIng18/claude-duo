@@ -1,4 +1,4 @@
 ---
-description: Xem các message đang chờ từ tài khoản Claude còn lại
+description: Show messages waiting from the other Claude account
 ---
-Gọi `duo_inbox` (box "open"). Trình bày danh sách ngắn gọn bằng tiếng Việt: id, loại, người gửi, tiêu đề, trạng thái. Nếu có message chưa xử lý, hỏi người dùng muốn mở message nào; khi họ chọn, gọi `duo_get` và làm theo skill duo-protocol. Nếu muốn xem cả những gì mình đã gửi, gọi thêm `duo_inbox` với `sent: true`.
+Call `duo_inbox` (box "open"). Present the list briefly in the user's language: id, type, sender, title, status. If there are unhandled messages, ask which one to open; when they choose, call `duo_get` and follow the duo-protocol skill (replies to the other peer are written in English). To also show what this account sent, call `duo_inbox` with `sent: true`.

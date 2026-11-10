@@ -16,27 +16,27 @@ const ACTIVE = ['accepted', 'in_progress', 'needs_info'];
 
 function str(v, name, { required = false, max = 100000 } = {}) {
   if (v === undefined || v === null || v === '') {
-    if (required) throw new DuoError('bad_args', `Thiếu tham số ${name}`);
+    if (required) throw new DuoError('bad_args', `Missing parameter ${name}`);
     return '';
   }
-  if (typeof v !== 'string') throw new DuoError('bad_args', `${name} phải là chuỗi`);
-  if (v.length > max) throw new DuoError('bad_args', `${name} quá dài (tối đa ${max} ký tự)`);
+  if (typeof v !== 'string') throw new DuoError('bad_args', `${name} must be a string`);
+  if (v.length > max) throw new DuoError('bad_args', `${name} is too long (max ${max} characters)`);
   return v;
 }
 
 function strList(v, name) {
   if (v === undefined || v === null) return [];
-  if (!Array.isArray(v) || v.some((x) => typeof x !== 'string')) throw new DuoError('bad_args', `${name} phải là mảng chuỗi`);
+  if (!Array.isArray(v) || v.some((x) => typeof x !== 'string')) throw new DuoError('bad_args', `${name} must be an array of strings`);
   return v;
 }
 
 function attachmentsArg(v) {
   if (v === undefined || v === null) return [];
-  if (!Array.isArray(v)) throw new DuoError('bad_args', 'attachments phải là mảng');
+  if (!Array.isArray(v)) throw new DuoError('bad_args', 'attachments must be an array');
   return v.map((a, i) => {
     const p = typeof a === 'string' ? a : a && a.path;
-    if (typeof p !== 'string' || !path.isAbsolute(p)) throw new DuoError('bad_args', `attachments[${i}].path phải là đường dẫn tuyệt đối`);
-    if (!fs.existsSync(p)) throw new DuoError('bad_args', `attachments[${i}]: file không tồn tại: ${p}`);
+    if (typeof p !== 'string' || !path.isAbsolute(p)) throw new DuoError('bad_args', `attachments[${i}].path must be an absolute path`);
+    if (!fs.existsSync(p)) throw new DuoError('bad_args', `attachments[${i}]: file does not exist: ${p}`);
     return { path: p, note: typeof a === 'object' && typeof a.note === 'string' ? a.note : '' };
   });
 }
@@ -49,38 +49,38 @@ function activeWork(me, sid) {
 
 export function preview(cfg, me, a) {
   return [
-    `Gửi tới: ${label(cfg, other(me))}`,
-    `Loại: ${a.type}`,
-    `Tiêu đề: ${a.title}`,
-    `Nội dung:\n${a.body}`,
-    a.acceptance && a.acceptance.length ? `Tiêu chí hoàn thành:\n- ${a.acceptance.join('\n- ')}` : null,
-    a.attachments && a.attachments.length ? `Đính kèm:\n- ${a.attachments.map((x) => (typeof x === 'string' ? x : x.path)).join('\n- ')}` : null,
+    `To: ${label(cfg, other(me))}`,
+    `Type: ${a.type}`,
+    `Title: ${a.title}`,
+    `Body:\n${a.body}`,
+    a.acceptance && a.acceptance.length ? `Acceptance criteria:\n- ${a.acceptance.join('\n- ')}` : null,
+    a.attachments && a.attachments.length ? `Attachments:\n- ${a.attachments.map((x) => (typeof x === 'string' ? x : x.path)).join('\n- ')}` : null,
   ].filter(Boolean).join('\n');
 }
 
 // ---------------------------------------------------------------- send
 export async function send(cfg, me, sid, a = {}, { deliverNow = true } = {}) {
   const type = a.type || 'task';
-  if (!['task', 'question', 'info'].includes(type)) throw new DuoError('bad_args', 'type phải là task | question | info (kết quả thì dùng duo_reply)');
+  if (!['task', 'question', 'info'].includes(type)) throw new DuoError('bad_args', 'type must be task | question | info (use duo_reply for results)');
   const title = str(a.title, 'title', { required: true, max: 300 });
   const body = str(a.body, 'body', { required: type !== 'info', max: 2_000_000 });
   const to = a.to ? String(a.to).toUpperCase() : other(me);
-  if (!PEERS.includes(to) || to === me) throw new DuoError('bad_args', `to phải là ${other(me)}`);
-  if (a.delivery && !MODES.includes(a.delivery)) throw new DuoError('bad_args', `delivery phải là: ${MODES.join(', ')}`);
+  if (!PEERS.includes(to) || to === me) throw new DuoError('bad_args', `to must be ${other(me)}`);
+  if (a.delivery && !MODES.includes(a.delivery)) throw new DuoError('bad_args', `delivery must be one of: ${MODES.join(', ')}`);
   const acceptance = strList(a.acceptance, 'acceptance');
   const attachments = attachmentsArg(a.attachments);
   const cwd = path.resolve(a.cwd ? String(a.cwd) : process.cwd());
 
   if (cfg.approval.before_send === 'ask' && a.user_confirmed !== true) {
     throw new DuoError('approval_required',
-      `Cấu hình yêu cầu người dùng duyệt trước khi gửi. Hãy cho người dùng xem bản nháp dưới đây, hỏi họ có đồng ý không, và CHỈ khi họ đồng ý thì gọi lại duo_send với user_confirmed: true.\n\n${preview(cfg, me, { type, title, body, acceptance, attachments })}`);
+      `The configuration requires the user to approve before sending. Show the user the draft below (you may translate it for them), ask whether to send it, and ONLY if they agree call duo_send again with user_confirmed: true.\n\n${preview(cfg, me, { type, title, body, acceptance, attachments })}`);
   }
 
   // rate limit
   const since = Date.now() - 10 * 60 * 1000;
   const recent = listMessages({ from: me }).filter((m) => Date.parse(m.created_at) > since && m.type !== 'result');
   if (recent.length >= cfg.limits.max_messages_per_10min) {
-    throw new DuoError('rate_limited', `Đã gửi ${recent.length} message trong 10 phút (giới hạn ${cfg.limits.max_messages_per_10min}). Dừng lại và báo người dùng.`);
+    throw new DuoError('rate_limited', `${recent.length} messages sent in the last 10 minutes (limit ${cfg.limits.max_messages_per_10min}). Stop and tell the user.`);
   }
 
   // loop prevention
@@ -88,10 +88,10 @@ export async function send(cfg, me, sid, a = {}, { deliverNow = true } = {}) {
   let parent = null;
   if (a.parent_id) parent = requireMessage(String(a.parent_id));
   if (type === 'task' && mine.some((m) => m.from === to)) {
-    throw new DuoError('loop_blocked', `Bạn đang xử lý việc do ${label(cfg, to)} giao (${mine.filter((m) => m.from === to).map((m) => m.id).join(', ')}). Không được giao task ngược lại. Nếu cần hỏi thêm, gọi duo_reply với status "needs_info".`);
+    throw new DuoError('loop_blocked', `You are working on a task given by ${label(cfg, to)} (${mine.filter((m) => m.from === to).map((m) => m.id).join(', ')}). You may not hand a task back to it. If you need more information, call duo_reply with status "needs_info".`);
   }
   const hop = parent ? (parent.hop || 0) + 1 : mine.length ? Math.max(...mine.map((m) => m.hop || 0)) + 1 : 0;
-  if (hop > cfg.limits.max_hops) throw new DuoError('loop_blocked', `Vượt giới hạn chuyển tiếp (hop ${hop} > max_hops ${cfg.limits.max_hops}). Dừng lại và báo người dùng.`);
+  if (hop > cfg.limits.max_hops) throw new DuoError('loop_blocked', `Delegation chain too long (hop ${hop} > max_hops ${cfg.limits.max_hops}). Stop and tell the user.`);
 
   const msg = createMessage({
     from: me, to, type, title, body, acceptance, attachments, cwd, hop,
@@ -122,7 +122,7 @@ function startWork(id, sid) {
 
 export function get(cfg, me, sid, id) {
   let m = requireMessage(String(id));
-  if (m.to !== me && m.from !== me) throw new DuoError('forbidden', 'Message này không thuộc về bạn');
+  if (m.to !== me && m.from !== me) throw new DuoError('forbidden', 'This message does not belong to you');
   let needsAccept = false;
   if (m.to === me) {
     m = markExpired(m);
@@ -148,9 +148,9 @@ function resumeAfterAnswer(m) {
 
 export function accept(cfg, me, sid, id) {
   const m = requireMessage(String(id));
-  if (m.to !== me) throw new DuoError('forbidden', 'Chỉ bên nhận mới chấp nhận được');
-  if (!WORK_TYPES.includes(m.type)) throw new DuoError('bad_args', 'Chỉ task/câu hỏi mới cần chấp nhận');
-  if (!['queued', 'delivered'].includes(m.status)) throw new DuoError('bad_state', `Message đang ở trạng thái ${m.status}`);
+  if (m.to !== me) throw new DuoError('forbidden', 'Only the receiver can accept');
+  if (!WORK_TYPES.includes(m.type)) throw new DuoError('bad_args', 'Only tasks/questions need accepting');
+  if (!['queued', 'delivered'].includes(m.status)) throw new DuoError('bad_state', `Message is in state ${m.status}`);
   return startWork(m.id, sid);
 }
 
@@ -172,26 +172,26 @@ async function ship(cfg, id, mode) {
 export async function reply(cfg, me, sid, a = {}, { deliverMode = 'sync' } = {}) {
   const id = str(a.id, 'id', { required: true, max: 64 });
   const status = a.status || 'done';
-  if (!['done', 'failed', 'needs_info'].includes(status)) throw new DuoError('bad_args', 'status phải là done | failed | needs_info');
+  if (!['done', 'failed', 'needs_info'].includes(status)) throw new DuoError('bad_args', 'status must be done | failed | needs_info');
   const summaryText = str(a.summary, 'summary', { required: true, max: 20000 });
   const details = str(a.details, 'details', { max: 2_000_000 });
   const outputs = attachmentsArg(a.outputs);
   const openIssues = strList(a.open_issues, 'open_issues');
   let m = requireMessage(id);
-  if (m.to !== me) throw new DuoError('forbidden', 'Chỉ bên nhận message mới trả lời được');
-  if (!WORK_TYPES.includes(m.type)) throw new DuoError('bad_args', 'Chỉ task/câu hỏi mới cần duo_reply');
-  if (TERMINAL.includes(m.status)) throw new DuoError('bad_state', `Message đã ở trạng thái ${m.status}`);
+  if (m.to !== me) throw new DuoError('forbidden', 'Only the receiver of the message can reply');
+  if (!WORK_TYPES.includes(m.type)) throw new DuoError('bad_args', 'Only tasks/questions take duo_reply');
+  if (TERMINAL.includes(m.status)) throw new DuoError('bad_state', `Message is already in state ${m.status}`);
   if (['queued', 'delivered'].includes(m.status)) {
-    if (cfg.approval.before_accept === 'ask' && !m.reply_to) throw new DuoError('approval_required', 'Message chưa được chấp nhận. Hỏi người dùng rồi gọi duo_accept trước.');
+    if (cfg.approval.before_accept === 'ask' && !m.reply_to) throw new DuoError('approval_required', 'Message not accepted yet. Ask the user, then call duo_accept first.');
     m = startWork(m.id, sid);
   }
   const result = { status, summary: summaryText, details, outputs, open_issues: openIssues, auto_result: a.auto_result === true };
 
   if (status === 'needs_info') {
-    if (m.type !== 'task') throw new DuoError('bad_args', 'needs_info chỉ dùng cho task');
+    if (m.type !== 'task') throw new DuoError('bad_args', 'needs_info is only for tasks');
     const q = createMessage({
       from: me, to: m.from, type: 'question', reply_to: m.id, thread_id: m.thread_id, hop: m.hop, cwd: m.cwd,
-      title: `Cần thêm thông tin: ${m.title}`.slice(0, 300),
+      title: `Needs info: ${m.title}`.slice(0, 300),
       body: details ? `${summaryText}\n\n${details}` : summaryText,
       deadline_s: cfg.limits.default_deadline_s,
       meta: { sender_session: sid || null, wake_session: m.meta.sender_session || null },
@@ -215,13 +215,13 @@ export async function reject(cfg, me, sid, a = {}) {
   const id = str(a.id, 'id', { required: true, max: 64 });
   const reason = str(a.reason, 'reason', { required: true, max: 5000 });
   const m = requireMessage(id);
-  if (m.to !== me) throw new DuoError('forbidden', 'Chỉ bên nhận mới từ chối được');
-  if (!WORK_TYPES.includes(m.type) || TERMINAL.includes(m.status)) throw new DuoError('bad_state', `Không từ chối được message ở trạng thái ${m.status}`);
+  if (m.to !== me) throw new DuoError('forbidden', 'Only the receiver can reject');
+  if (!WORK_TYPES.includes(m.type) || TERMINAL.includes(m.status)) throw new DuoError('bad_state', `Cannot reject a message in state ${m.status}`);
   const result = { status: 'rejected', summary: reason, details: '', outputs: [], open_issues: [] };
   updateMessage(m.id, (x) => { x.status = 'rejected'; x.result = result; });
   const r = createMessage({
     from: me, to: m.from, type: 'result', reply_to: m.id, thread_id: m.thread_id, hop: m.hop, cwd: m.cwd,
-    title: m.title, body: `Đã từ chối: ${reason}`, result,
+    title: m.title, body: `Rejected: ${reason}`, result,
     meta: { sender_session: sid || null, wake_session: m.meta.sender_session || null },
   });
   const delivery = await deliver(cfg, r.id);
@@ -233,9 +233,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function wait(cfg, me, a = {}) {
   const id = str(a.id, 'id', { required: true, max: 64 });
-  const timeout = Math.min(Math.max(Number.isInteger(a.timeout_s) ? a.timeout_s : 600, 1), 3600);
+  const timeout = Math.min(Math.max(Number.isInteger(a.timeout_s) ? a.timeout_s : 300, 1), 1800);
   const m0 = requireMessage(id);
-  if (m0.from !== me) throw new DuoError('forbidden', 'Chỉ bên gửi mới chờ kết quả được');
+  if (m0.from !== me) throw new DuoError('forbidden', 'Only the sender can wait for the result');
   const end = Date.now() + timeout * 1000;
   for (;;) {
     const answer = listMessages({ to: me, boxes: ['new'] }).find((x) => x.reply_to === id && (x.type === 'result' || x.type === 'question'));
@@ -254,17 +254,17 @@ export async function wait(cfg, me, a = {}) {
 
 export async function cancel(cfg, me, sid, a = {}) {
   const id = str(a.id, 'id', { required: true, max: 64 });
-  const reason = str(a.reason, 'reason', { max: 2000 }) || 'Người gửi đã hủy';
+  const reason = str(a.reason, 'reason', { max: 2000 }) || 'Cancelled by the sender';
   const m = requireMessage(id);
-  if (m.from !== me) throw new DuoError('forbidden', 'Chỉ bên gửi mới hủy được');
-  if (TERMINAL.includes(m.status)) throw new DuoError('bad_state', `Message đã ở trạng thái ${m.status}`);
+  if (m.from !== me) throw new DuoError('forbidden', 'Only the sender can cancel');
+  if (TERMINAL.includes(m.status)) throw new DuoError('bad_state', `Message is already in state ${m.status}`);
   const wasStarted = ACTIVE.includes(m.status);
   updateMessage(m.id, (x) => { x.status = 'cancelled'; x.meta.cancel_reason = reason; });
   let note = null;
   if (wasStarted || m.status === 'delivered') {
     note = createMessage({
       from: me, to: m.to, type: 'cancel', reply_to: m.id, thread_id: m.thread_id, hop: m.hop, cwd: m.cwd,
-      title: `Đã hủy: ${m.title}`.slice(0, 300), body: `${label(cfg, me)} đã hủy message ${m.id}. Lý do: ${reason}. Dừng làm việc này, KHÔNG gọi duo_reply cho nó.`,
+      title: `Cancelled: ${m.title}`.slice(0, 300), body: `${label(cfg, me)} cancelled message ${m.id}. Reason: ${reason}. Stop working on it and do NOT call duo_reply for it.`,
       meta: { sender_session: sid || null, wake_session: m.meta.handler_session || null },
     });
     await deliver(cfg, note.id);
@@ -305,16 +305,16 @@ export function status(cfg, me) {
 export function render(m, { full = true } = {}) {
   const lines = [summary(m)];
   if (full) {
-    lines.push(`thread: ${m.thread_id}${m.reply_to ? ` · trả lời cho: ${m.reply_to}` : ''} · hop: ${m.hop} · tạo lúc: ${m.created_at}`);
-    if (m.cwd) lines.push(`thư mục làm việc: ${m.cwd}`);
-    lines.push('', m.body || '(trống)');
-    if (m.acceptance && m.acceptance.length) lines.push('', 'Tiêu chí hoàn thành:', ...m.acceptance.map((x) => `- ${x}`));
-    if (m.attachments && m.attachments.length) lines.push('', 'Đính kèm (đọc trực tiếp từ đường dẫn):', ...m.attachments.map((x) => `- ${x.path}${x.note ? ` — ${x.note}` : ''}`));
-    if (m.meta && m.meta.body_file) lines.push('', `Nội dung đầy đủ: ${m.meta.body_file}`);
+    lines.push(`thread: ${m.thread_id}${m.reply_to ? ` · reply to: ${m.reply_to}` : ''} · hop: ${m.hop} · created: ${m.created_at}`);
+    if (m.cwd) lines.push(`working directory: ${m.cwd}`);
+    lines.push('', m.body || '(empty)');
+    if (m.acceptance && m.acceptance.length) lines.push('', 'Acceptance criteria:', ...m.acceptance.map((x) => `- ${x}`));
+    if (m.attachments && m.attachments.length) lines.push('', 'Attachments (read them from these paths):', ...m.attachments.map((x) => `- ${x.path}${x.note ? ` — ${x.note}` : ''}`));
+    if (m.meta && m.meta.body_file) lines.push('', `Full content: ${m.meta.body_file}`);
     if (m.result) {
-      lines.push('', `Kết quả: ${m.result.status}${m.result.auto_result ? ' (tự tạo vì bên kia không gọi duo_reply)' : ''}`);
-      if (m.result.outputs && m.result.outputs.length) lines.push('Sản phẩm:', ...m.result.outputs.map((x) => `- ${x.path}`));
-      if (m.result.open_issues && m.result.open_issues.length) lines.push('Vấn đề còn mở:', ...m.result.open_issues.map((x) => `- ${x}`));
+      lines.push('', `Result: ${m.result.status}${m.result.auto_result ? ' (auto-generated: the other peer did not call duo_reply)' : ''}`);
+      if (m.result.outputs && m.result.outputs.length) lines.push('Outputs:', ...m.result.outputs.map((x) => `- ${x.path}`));
+      if (m.result.open_issues && m.result.open_issues.length) lines.push('Open issues:', ...m.result.open_issues.map((x) => `- ${x}`));
     }
   }
   return lines.join('\n');

@@ -23,24 +23,24 @@ export function agentsDirFor(configDir) {
 }
 
 export function installExample(cfg, name, { overwrite = false } = {}) {
-  if (!/^[a-z0-9-]+$/.test(name)) throw new DuoError('bad_args', 'Tên bộ mẫu không hợp lệ');
+  if (!/^[a-z0-9-]+$/.test(name)) throw new DuoError('bad_args', 'Invalid example pack name');
   const ex = listExamples().find((e) => e.name === name);
-  if (!ex) throw new DuoError('not_found', `Không có bộ mẫu "${name}". Có: ${listExamples().map((e) => e.name).join(', ')}`);
+  if (!ex) throw new DuoError('not_found', `No example pack "${name}". Available: ${listExamples().map((e) => e.name).join(', ')}`);
   const lines = [];
   const next = structuredClone(cfg);
   for (const p of PEERS) {
     const dest = ensureDir(agentsDirFor(cfg.peers[p].config_dir));
     for (const file of (ex.agents && ex.agents[p]) || []) {
-      if (!/^[a-z0-9-]+\.md$/.test(file)) throw new DuoError('bad_example', `Tên file agent không hợp lệ: ${file}`);
+      if (!/^[a-z0-9-]+\.md$/.test(file)) throw new DuoError('bad_example', `Invalid agent file name: ${file}`);
       const src = path.join(EXAMPLES_DIR, name, 'agents', file);
       const target = path.join(dest, file);
       const content = fs.readFileSync(src, 'utf8');
       if (fs.existsSync(target) && fs.readFileSync(target, 'utf8') !== content && !overwrite) {
-        lines.push(`- ${p}: BỎ QUA ${target} (đã có file khác cùng tên; dùng overwrite=true để ghi đè)`);
+        lines.push(`- ${p}: SKIPPED ${target} (a different file with the same name exists; use overwrite=true to replace it)`);
         continue;
       }
       fs.writeFileSync(target, content);
-      lines.push(`- ${p}: đã cài agent ${target}`);
+      lines.push(`- ${p}: installed agent ${target}`);
     }
     if (ex.roles && ex.roles[p]) {
       next.peers[p].name = ex.roles[p].name;
@@ -48,7 +48,7 @@ export function installExample(cfg, name, { overwrite = false } = {}) {
     }
   }
   saveConfig(next);
-  lines.unshift(`Đã cài bộ mẫu "${ex.title}". Vai trò: A = ${next.peers.A.name}, B = ${next.peers.B.name}.`);
-  lines.push('Mở lại phiên claude-a / claude-b để nạp agent mới.');
+  lines.unshift(`Installed example pack "${ex.title}". Roles: A = ${next.peers.A.name}, B = ${next.peers.B.name}.`);
+  lines.push('Restart claude-a / claude-b to load the new agents.');
   return { lines };
 }

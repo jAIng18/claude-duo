@@ -37,21 +37,23 @@ Start the two accounts with `claude-a` and `claude-b` instead of `claude`.
 | See the overall status | `/duo:status` |
 | Change settings | `/duo:config <what to change>` |
 
-By default, Claude shows you the draft and asks before sending anything.
+By default, Claude shows you the draft and asks before sending. The other account then works **in the background** (no extra windows) and the result comes back in the same conversation. The two Claudes talk to each other in English; they still talk to you in your language.
 
 ### How the receiving side runs (set per direction)
 
 | Mode | What happens |
 |---|---|
-| `new-tab` (default) | Opens a new Terminal window so you can watch the other account work |
-| `background` | Runs silently and remembers earlier tasks. Watch it with `duo attach B` |
+| `background` (default) | Runs silently, remembers earlier tasks, sends the result back. Peek at it with `duo attach B` |
+| `new-tab` | Opens a new Terminal window so you can watch the other account work |
 | `live-session` | Types the task into the other account's window that is already open (started with `claude-a` / `claude-b`) |
+
+Change it with `/duo:config`, e.g. *"show B's work in a new window"*.
 
 ## Troubleshooting
 
 - Run `duo doctor` in a terminal. It checks everything and tells you how to fix each problem.
 - **"Stop hook error: [claude-duo] …"** is normal. It is how Claude Code shows claude-duo asking it to continue.
-- **`workspace_not_trusted`** (background mode): in that folder, run `claude-b` once, choose **Yes** when asked to trust the folder, then `/exit`.
+- **`workspace_not_trusted`**: the receiving account has not trusted that folder yet. In that folder, run `claude-b` (or `claude-a`) once, choose **Yes** when asked to trust the folder, then `/exit`. Do this once per project folder.
 
 ## Uninstall
 

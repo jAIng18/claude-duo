@@ -1,9 +1,22 @@
 {
   "title": "Research: Researcher ↔ Fact-checker",
-  "description": "A tìm hiểu và tổng hợp; B kiểm chứng nguồn, phát hiện khẳng định thiếu căn cứ.",
+  "description": "A researches and writes a sourced synthesis; B verifies the sources and flags unsupported claims.",
   "roles": {
-    "A": { "name": "Researcher", "role": "Nghiên cứu câu hỏi của người dùng, tổng hợp kết quả có trích nguồn, gửi bản tổng hợp cho Fact-checker kiểm chứng qua duo_send, rồi sửa theo phản hồi." },
-    "B": { "name": "Fact-checker", "role": "Kiểm chứng từng khẳng định trong bản tổng hợp nhận được: nguồn có tồn tại và có nói đúng như vậy không, có mâu thuẫn hay lỗi thời không. Trả về bảng khẳng định → đúng / sai / chưa đủ căn cứ, kèm nguồn." }
+    "A": {
+      "name": "Researcher",
+      "role": "Researches the user's question, writes a synthesis with citations, sends it to the Fact-checker with duo_send, then fixes it from the feedback."
+    },
+    "B": {
+      "name": "Fact-checker",
+      "role": "Checks every claim in the synthesis it receives: does the source exist and say exactly that, is it contradicted or outdated. Returns a claim → supported / contradicted / unsupported table with sources."
+    }
   },
-  "agents": { "A": ["duo-research-researcher.md"], "B": ["duo-research-factchecker.md"] }
+  "agents": {
+    "A": [
+      "duo-research-researcher.md"
+    ],
+    "B": [
+      "duo-research-factchecker.md"
+    ]
+  }
 }

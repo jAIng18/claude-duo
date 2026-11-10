@@ -1,5 +1,5 @@
 // Minimal, dependency-free MCP server (JSON-RPC 2.0 over newline-delimited
-// stdio). Tools: SPEC §9.
+// stdio). Tools: SPEC §9. All Claude-facing text is in English.
 import readline from 'node:readline';
 import {
   loadConfig, saveConfig, configExists, initConfig, requireMe, DuoError, getKey, setKey,
@@ -10,32 +10,32 @@ import { summary } from './mailbox.mjs';
 import { listExamples, installExample } from './examples.mjs';
 import { log } from './fsutil.mjs';
 
-const SERVER = { name: 'duo', version: '0.4.0' };
+const SERVER = { name: 'duo', version: '0.5.0' };
 const PROTOCOLS = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'];
 
-const idProp = { type: 'string', description: 'Message id, dạng YYYYMMDD-HHMMSS-xxxx' };
+const idProp = { type: 'string', description: 'Message id, format YYYYMMDD-HHMMSS-xxxx' };
 const pathList = {
   type: 'array',
-  items: { type: 'object', properties: { path: { type: 'string', description: 'Đường dẫn TUYỆT ĐỐI' }, note: { type: 'string' } }, required: ['path'], additionalProperties: false },
+  items: { type: 'object', properties: { path: { type: 'string', description: 'ABSOLUTE path' }, note: { type: 'string' } }, required: ['path'], additionalProperties: false },
 };
 
 export const TOOLS = [
   {
     name: 'duo_send',
-    description: 'Gửi task / câu hỏi / thông báo cho peer Claude còn lại (tài khoản kia). Nội dung phải TỰ CHỨA ngữ cảnh: bên kia không thấy hội thoại của bạn. Nếu trả về approval_required: cho người dùng xem bản nháp, chỉ gọi lại với user_confirmed=true khi họ đồng ý. Kết quả sẽ quay về như một message "result" (đọc bằng duo_get) hoặc chờ bằng duo_wait.',
+    description: 'Send a task / question / notice to the other Claude peer (the other account on this Mac). Write it in ENGLISH and make it SELF-CONTAINED: the other peer cannot see this conversation. If it returns approval_required, show the user the draft and call again with user_confirmed=true only after they agree. After sending, normally call duo_wait to get the result and report it to the user.',
     inputSchema: {
       type: 'object',
       properties: {
-        type: { type: 'string', enum: ['task', 'question', 'info'], description: 'task = giao việc, question = hỏi ý kiến/thông tin, info = thông báo một chiều' },
-        title: { type: 'string', description: 'Tiêu đề ngắn (≤ 300 ký tự)' },
-        body: { type: 'string', description: 'Mô tả đầy đủ, tự chứa ngữ cảnh: mục tiêu, bối cảnh, file liên quan, ràng buộc' },
-        acceptance: { type: 'array', items: { type: 'string' }, description: 'Tiêu chí hoàn thành' },
+        type: { type: 'string', enum: ['task', 'question', 'info'], description: 'task = do work, question = ask for information/opinion, info = one-way notice' },
+        title: { type: 'string', description: 'Short title (≤ 300 chars), in English' },
+        body: { type: 'string', description: 'Full, self-contained description in English: goal, context, relevant files, constraints' },
+        acceptance: { type: 'array', items: { type: 'string' }, description: 'Acceptance criteria' },
         attachments: pathList,
-        cwd: { type: 'string', description: 'Thư mục bên kia nên làm việc (mặc định: thư mục hiện tại)' },
-        delivery: { type: 'string', enum: MODES, description: 'Ghi đè cách giao cho riêng message này (bình thường để trống)' },
-        parent_id: { type: 'string', description: 'Id message mà việc này phát sinh từ đó (nếu có)' },
-        deadline_s: { type: 'integer', minimum: 60, description: 'Hết hạn sau N giây nếu chưa ai nhận' },
-        user_confirmed: { type: 'boolean', description: 'true CHỈ KHI người dùng đã đồng ý bản nháp' },
+        cwd: { type: 'string', description: 'Folder the other peer should work in (default: current folder)' },
+        delivery: { type: 'string', enum: MODES, description: 'Override the delivery mode for this message only (normally leave empty)' },
+        parent_id: { type: 'string', description: 'Id of the message this work derives from, if any' },
+        deadline_s: { type: 'integer', minimum: 60, description: 'Expire after N seconds if nobody picks it up' },
+        user_confirmed: { type: 'boolean', description: 'true ONLY when the user approved the draft' },
       },
       required: ['type', 'title', 'body'],
       additionalProperties: false,
@@ -43,11 +43,11 @@ export const TOOLS = [
   },
   {
     name: 'duo_inbox',
-    description: 'Liệt kê message gửi tới bạn (hoặc bạn đã gửi, sent=true).',
+    description: 'List messages sent to you (or that you sent, with sent=true).',
     inputSchema: {
       type: 'object',
       properties: {
-        box: { type: 'string', enum: ['open', 'new', 'cur', 'done', 'all'], description: 'open = chưa kết thúc (mặc định)' },
+        box: { type: 'string', enum: ['open', 'new', 'cur', 'done', 'all'], description: 'open = not finished yet (default)' },
         sent: { type: 'boolean' },
         limit: { type: 'integer', minimum: 1, maximum: 200 },
       },
@@ -56,24 +56,24 @@ export const TOOLS = [
   },
   {
     name: 'duo_get',
-    description: 'Đọc đầy đủ một message. Với task/câu hỏi gửi tới bạn: đọc nghĩa là bắt đầu xử lý (trừ khi cần người dùng chấp nhận trước). Với kết quả/thông báo: đánh dấu đã đọc.',
+    description: 'Read a message in full. For a task/question addressed to you, reading it starts the work (unless the user must accept it first). For a result/notice, it marks it as read.',
     inputSchema: { type: 'object', properties: { id: idProp }, required: ['id'], additionalProperties: false },
   },
   {
     name: 'duo_accept',
-    description: 'Chấp nhận một task/câu hỏi SAU KHI người dùng đồng ý (chỉ cần khi duo_get báo cần chấp nhận).',
+    description: 'Accept a task/question AFTER the user agreed (only needed when duo_get says acceptance is required).',
     inputSchema: { type: 'object', properties: { id: idProp }, required: ['id'], additionalProperties: false },
   },
   {
     name: 'duo_reply',
-    description: 'Trả kết quả cho task/câu hỏi bạn đã nhận. BẮT BUỘC gọi khi xong. status: done (xong), failed (không làm được, nêu lý do), needs_info (cần hỏi lại bên giao — summary là câu hỏi).',
+    description: 'Return the result of a task/question you received. MANDATORY when you finish. Write it in English. status: done (finished), failed (could not do it; say why), needs_info (you need to ask the sender — summary is the question).',
     inputSchema: {
       type: 'object',
       properties: {
         id: idProp,
         status: { type: 'string', enum: ['done', 'failed', 'needs_info'] },
-        summary: { type: 'string', description: 'Tóm tắt kết quả (hoặc câu hỏi nếu needs_info)' },
-        details: { type: 'string', description: 'Chi tiết: đã làm gì, lệnh đã chạy, kết quả kiểm tra' },
+        summary: { type: 'string', description: 'Result summary (or the question, for needs_info)' },
+        details: { type: 'string', description: 'Details: what you did, commands run, checks performed' },
         outputs: pathList,
         open_issues: { type: 'array', items: { type: 'string' } },
       },
@@ -83,34 +83,34 @@ export const TOOLS = [
   },
   {
     name: 'duo_reject',
-    description: 'Từ chối một task/câu hỏi (ví dụ ngoài phạm vi, người dùng không đồng ý).',
+    description: 'Reject a task/question (e.g. out of scope, or the user said no).',
     inputSchema: { type: 'object', properties: { id: idProp, reason: { type: 'string' } }, required: ['id', 'reason'], additionalProperties: false },
   },
   {
     name: 'duo_wait',
-    description: 'Chờ kết quả của một message bạn đã gửi (chặn tối đa timeout_s giây, mặc định 600). Chỉ dùng khi bạn KHÔNG thể làm tiếp nếu chưa có kết quả.',
-    inputSchema: { type: 'object', properties: { id: idProp, timeout_s: { type: 'integer', minimum: 1, maximum: 3600 } }, required: ['id'], additionalProperties: false },
+    description: 'Wait for the result of a message you sent (blocks up to timeout_s seconds, default 300). Use it right after duo_send so you can report the result to the user. If it times out, tell the user the work is still running; the result will be delivered to this session when it arrives.',
+    inputSchema: { type: 'object', properties: { id: idProp, timeout_s: { type: 'integer', minimum: 1, maximum: 1800 } }, required: ['id'], additionalProperties: false },
   },
   {
     name: 'duo_cancel',
-    description: 'Hủy một message bạn đã gửi mà chưa xong.',
+    description: 'Cancel a message you sent that is not finished.',
     inputSchema: { type: 'object', properties: { id: idProp, reason: { type: 'string' } }, required: ['id'], additionalProperties: false },
   },
   {
     name: 'duo_status',
-    description: 'Trạng thái claude-duo: bạn là peer nào, các phiên đang mở, message đang chờ, cấu hình giao nhận.',
+    description: 'claude-duo status: which peer you are, open sessions, pending messages, delivery settings.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'duo_config',
-    description: 'Xem / khởi tạo / sửa cấu hình claude-duo. action=get (key tùy chọn, dạng a.b.c), action=init (tạo cấu hình mới, values = các giá trị ghi đè), action=set (key + value). init/set CHỈ gọi sau khi người dùng đồng ý, kèm user_confirmed=true.',
+    description: 'View / create / change the claude-duo configuration. action=get (optional key, dotted a.b.c), action=init (create a new configuration; values = overrides of the defaults), action=set (key + value). init/set ONLY after the user agreed, with user_confirmed=true.',
     inputSchema: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['get', 'set', 'init'] },
         key: { type: 'string' },
-        value: { description: 'Giá trị mới (JSON bất kỳ)' },
-        values: { type: 'object', description: 'Cho action=init: object ghi đè lên cấu hình mặc định' },
+        value: { description: 'New value (any JSON)' },
+        values: { type: 'object', description: 'For action=init: object merged over the default configuration' },
         user_confirmed: { type: 'boolean' },
       },
       required: ['action'],
@@ -119,7 +119,7 @@ export const TOOLS = [
   },
   {
     name: 'duo_examples',
-    description: 'Bộ agent mẫu theo domain (dev, design, pm, research). action=list để xem; action=install để cài một bộ (copy agent vào đúng tài khoản A/B và đặt vai trò) — chỉ sau khi người dùng đồng ý, kèm user_confirmed=true.',
+    description: 'Example agent packs per domain (dev, design, pm, research). action=list to see them; action=install to install one (copies agents into accounts A/B and sets their roles) — only after the user agreed, with user_confirmed=true.',
     inputSchema: {
       type: 'object',
       properties: { action: { type: 'string', enum: ['list', 'install'] }, name: { type: 'string' }, overwrite: { type: 'boolean' }, user_confirmed: { type: 'boolean' } },
@@ -132,11 +132,11 @@ export const TOOLS = [
 function text(t) { return { content: [{ type: 'text', text: t }] }; }
 function errText(t) { return { content: [{ type: 'text', text: t }], isError: true }; }
 
-function deliveryLine(cfg, d) {
+function deliveryLine(d) {
   if (!d) return '';
-  if (d.ok) return `Đã giao (${d.via || 'ok'}${d.confirmed === false ? ', chưa xác nhận bên kia đã nhận' : ''}).`;
-  if (d.queued) return `Đang xếp hàng (${d.error}); sẽ tự giao khi bên kia rảnh.${d.hint ? ` ${d.hint}` : ''}`;
-  return `CHƯA giao được (${d.error}).${d.hint ? ` ${d.hint}` : ''} Message vẫn nằm trong hộp thư; báo người dùng.`;
+  if (d.ok) return `Delivered (${d.via || 'ok'}${d.confirmed === false ? ', pickup not confirmed yet' : ''}).`;
+  if (d.queued) return `Queued (${d.error}); it will be delivered automatically when the other peer is free.${d.hint ? ` ${d.hint}` : ''}`;
+  return `NOT delivered (${d.error}).${d.hint ? ` ${d.hint}` : ''} The message stays in the mailbox; tell the user.`;
 }
 
 const BLOCKED_KEYS = [/^dev\./, /^dev$/, /^version$/];
@@ -144,54 +144,56 @@ const BLOCKED_KEYS = [/^dev\./, /^dev$/, /^version$/];
 const handlers = {
   async duo_send(a, cfg, me, sid) {
     const r = await A.send(cfg, me, sid, a);
-    return text(`Đã tạo ${r.message.id} → ${label(cfg, r.message.to)}. ${deliveryLine(cfg, r.delivery)}\nTrạng thái: ${r.message.status}. Khi có kết quả bạn sẽ được báo; hoặc gọi duo_wait("${r.message.id}") nếu phải chờ.`);
+    const delivered = r.delivery && (r.delivery.ok || r.delivery.queued);
+    return text(`Created ${r.message.id} → ${label(cfg, r.message.to)}. ${deliveryLine(r.delivery)}\nStatus: ${r.message.status}.${delivered ? ` Next: call duo_wait("${r.message.id}") to get the result and report it to the user (unless the user wants to keep working meanwhile — the result will then be delivered to this session).` : ''}`);
   },
   async duo_inbox(a, cfg, me) {
     const list = A.inbox(cfg, me, a);
-    if (!list.length) return text('(không có message nào)');
+    if (!list.length) return text('(no messages)');
     return text(list.map(summary).join('\n'));
   },
   async duo_get(a, cfg, me, sid) {
     const r = A.get(cfg, me, sid, a.id);
     const parts = [A.render(r.message)];
-    if (r.needsAccept) parts.push('', '⚠️ CHƯA CHẤP NHẬN: cấu hình yêu cầu người dùng đồng ý trước. Tóm tắt task cho người dùng, hỏi họ; nếu đồng ý gọi duo_accept, nếu không gọi duo_reject.');
+    if (r.needsAccept) parts.push('', '⚠️ NOT ACCEPTED YET: the configuration requires the user to agree first. Summarise the task for the user and ask; if they agree call duo_accept, otherwise duo_reject.');
     else if (r.message.to === me && ['task', 'question'].includes(r.message.type) && r.message.status === 'in_progress') {
-      parts.push('', `➡️ Bạn đang xử lý message này. Làm đúng phạm vi rồi gọi duo_reply(id="${r.message.id}").`);
+      parts.push('', `➡️ You are now handling this message. Stay within its scope, then call duo_reply(id="${r.message.id}") in English.`);
     }
-    if (r.message.type === 'cancel') parts.push('', '➡️ Dừng việc liên quan; KHÔNG gọi duo_reply cho message đã hủy.');
-    if (r.thread.length) parts.push('', 'Các message cùng thread:', ...r.thread.map((x) => `- ${summary(x)}`));
+    if (r.message.type === 'cancel') parts.push('', '➡️ Stop the related work; do NOT call duo_reply for the cancelled message.');
+    if (r.message.type === 'result') parts.push('', '➡️ Check this result against what you asked for, then report it to the user in their language.');
+    if (r.thread.length) parts.push('', 'Other messages in this thread:', ...r.thread.map((x) => `- ${summary(x)}`));
     return text(parts.join('\n'));
   },
   async duo_accept(a, cfg, me, sid) {
     const m = A.accept(cfg, me, sid, a.id);
-    return text(`Đã chấp nhận ${m.id}. Bắt đầu làm, xong thì gọi duo_reply.`);
+    return text(`Accepted ${m.id}. Start working; call duo_reply when done.`);
   },
   async duo_reply(a, cfg, me, sid) {
     const r = await A.reply(cfg, me, sid, a);
-    if (r.question) return text(`Đã gửi câu hỏi ${r.question.id} cho ${label(cfg, r.question.to)}. ${deliveryLine(cfg, r.delivery)} Task ${r.task.id} chuyển sang needs_info; khi có câu trả lời bạn sẽ được báo.`);
-    return text(`Đã trả kết quả ${r.result.id} (${a.status}) cho ${label(cfg, r.result.to)}. ${deliveryLine(cfg, r.delivery)}`);
+    if (r.question) return text(`Sent question ${r.question.id} to ${label(cfg, r.question.to)}. ${deliveryLine(r.delivery)} Task ${r.task.id} is now needs_info; you will be notified when the answer arrives.`);
+    return text(`Sent result ${r.result.id} (${a.status}) to ${label(cfg, r.result.to)}. ${deliveryLine(r.delivery)}`);
   },
   async duo_reject(a, cfg, me, sid) {
     const r = await A.reject(cfg, me, sid, a);
-    return text(`Đã từ chối ${r.task.id}. ${deliveryLine(cfg, r.delivery)}`);
+    return text(`Rejected ${r.task.id}. ${deliveryLine(r.delivery)}`);
   },
   async duo_wait(a, cfg, me) {
     const r = await A.wait(cfg, me, a);
-    if (r.timeout) return text(`Hết thời gian chờ. ${r.task.id} đang ở trạng thái ${r.task.status}. Có thể gọi duo_wait lại hoặc làm việc khác.`);
-    if (!r.answer) return text(`${r.task.id} đã kết thúc với trạng thái ${r.task.status}.`);
-    if (r.answer.type === 'question') return text(`Bên kia cần thêm thông tin (câu hỏi ${r.answer.id}):\n\n${A.render(r.answer)}\n\n➡️ Trả lời bằng duo_reply(id="${r.answer.id}", status="done", summary=<câu trả lời>).`);
-    return text(A.render(r.answer));
+    if (r.timeout) return text(`Timed out. ${r.task.id} is in state ${r.task.status}. Tell the user it is still running (the result will be delivered to this session), or call duo_wait again.`);
+    if (!r.answer) return text(`${r.task.id} ended with state ${r.task.status}.`);
+    if (r.answer.type === 'question') return text(`The other peer needs more information (question ${r.answer.id}):\n\n${A.render(r.answer)}\n\n➡️ Answer it with duo_reply(id="${r.answer.id}", status="done", summary=<answer in English>) — ask the user first if you do not know the answer.`);
+    return text(`${A.render(r.answer)}\n\n➡️ Report this result to the user in their language.`);
   },
   async duo_cancel(a, cfg, me, sid) {
     const r = await A.cancel(cfg, me, sid, a);
-    return text(`Đã hủy ${r.task.id}.${r.note ? ` Đã báo bên kia (${r.note.id}).` : ''}`);
+    return text(`Cancelled ${r.task.id}.${r.note ? ` Notified the other peer (${r.note.id}).` : ''}`);
   },
   async duo_status(a, cfg, me) {
     return text(JSON.stringify(A.status(cfg, me), null, 2));
   },
   async duo_examples(a, cfg) {
-    if (a.action === 'list') return text(listExamples().map((e) => `- ${e.name}: ${e.title} — ${e.description}\n  A: ${e.roles.A.name} · B: ${e.roles.B.name}`).join('\n') || '(không có)');
-    if (a.user_confirmed !== true) throw new DuoError('approval_required', 'Hỏi người dùng trước, rồi gọi lại với user_confirmed=true.');
+    if (a.action === 'list') return text(listExamples().map((e) => `- ${e.name}: ${e.title} — ${e.description}\n  A: ${e.roles.A.name} · B: ${e.roles.B.name}`).join('\n') || '(none)');
+    if (a.user_confirmed !== true) throw new DuoError('approval_required', 'Ask the user first, then call again with user_confirmed=true.');
     const r = installExample(cfg, String(a.name || ''), { overwrite: a.overwrite === true });
     return text(r.lines.join('\n'));
   },
@@ -199,43 +201,43 @@ const handlers = {
 
 async function configTool(a) {
   if (a.action === 'get') {
-    if (!configExists()) return text('Chưa có cấu hình. Dùng action=init (sau khi người dùng đồng ý) để tạo. Mặc định sẽ là:\n' + JSON.stringify(defaultConfig(), null, 2));
+    if (!configExists()) return text('No configuration yet. Use action=init (after the user agreed) to create one. The defaults are:\n' + JSON.stringify(defaultConfig(), null, 2));
     const cfg = loadConfig();
     return text(JSON.stringify(a.key ? getKey(cfg, a.key) : cfg, null, 2));
   }
-  if (a.user_confirmed !== true) throw new DuoError('approval_required', 'Thay đổi cấu hình cần người dùng đồng ý. Trình bày thay đổi, hỏi họ, rồi gọi lại với user_confirmed=true.');
+  if (a.user_confirmed !== true) throw new DuoError('approval_required', 'Changing the configuration needs the user\'s consent. Present the change, ask, then call again with user_confirmed=true.');
   if (a.action === 'init') {
-    if (configExists()) throw new DuoError('exists', 'Đã có cấu hình. Dùng action=set để sửa từng mục.');
+    if (configExists()) throw new DuoError('exists', 'A configuration already exists. Use action=set to change individual keys.');
     const values = a.values && typeof a.values === 'object' ? a.values : {};
-    if (values.dev) throw new DuoError('forbidden', 'Không được đặt dev.* qua tool');
+    if (values.dev) throw new DuoError('forbidden', 'dev.* cannot be set through the tool');
     if (values.spawn && values.spawn.permission_mode && !SAFE_PERMISSION_MODES.includes(values.spawn.permission_mode)) {
-      throw new DuoError('forbidden', `spawn.permission_mode qua tool chỉ được: ${SAFE_PERMISSION_MODES.join(', ')}`);
+      throw new DuoError('forbidden', `spawn.permission_mode via the tool may only be: ${SAFE_PERMISSION_MODES.join(', ')}`);
     }
     const cfg = initConfig(values);
-    return text('Đã tạo cấu hình:\n' + JSON.stringify(cfg, null, 2));
+    return text('Configuration created:\n' + JSON.stringify(cfg, null, 2));
   }
   if (a.action === 'set') {
     const key = String(a.key || '');
-    if (!key || BLOCKED_KEYS.some((re) => re.test(key))) throw new DuoError('forbidden', `Không được sửa key "${key}" qua tool`);
+    if (!key || BLOCKED_KEYS.some((re) => re.test(key))) throw new DuoError('forbidden', `Key "${key}" cannot be changed through the tool`);
     if (key === 'spawn.permission_mode' && !SAFE_PERMISSION_MODES.includes(a.value)) {
-      throw new DuoError('forbidden', `spawn.permission_mode qua tool chỉ được: ${SAFE_PERMISSION_MODES.join(', ')} (bypassPermissions chỉ đặt được bằng tay trong file config)`);
+      throw new DuoError('forbidden', `spawn.permission_mode via the tool may only be: ${SAFE_PERMISSION_MODES.join(', ')} (bypassPermissions can only be set by editing the config file by hand)`);
     }
     if (key === 'spawn' && a.value && typeof a.value === 'object' && a.value.permission_mode && !SAFE_PERMISSION_MODES.includes(a.value.permission_mode)) {
-      throw new DuoError('forbidden', 'spawn.permission_mode không hợp lệ cho tool');
+      throw new DuoError('forbidden', 'spawn.permission_mode not allowed through the tool');
     }
     const cfg = loadConfig();
     const next = setKey(cfg, key, a.value);
     saveConfig(next);
-    return text(`Đã đặt ${key} = ${JSON.stringify(a.value)}`);
+    return text(`Set ${key} = ${JSON.stringify(a.value)}`);
   }
-  throw new DuoError('bad_args', 'action phải là get | set | init');
+  throw new DuoError('bad_args', 'action must be get | set | init');
 }
 
 export async function callTool(name, args, env = process.env) {
   const a = args && typeof args === 'object' ? args : {};
   try {
     if (name === 'duo_config') return await configTool(a);
-    if (!handlers[name]) return errText(`Tool không tồn tại: ${name}`);
+    if (!handlers[name]) return errText(`Unknown tool: ${name}`);
     const cfg = loadConfig();
     if (name === 'duo_examples' && a.action === 'list') return await handlers[name](a, cfg);
     const me = requireMe(cfg, env);
@@ -244,7 +246,7 @@ export async function callTool(name, args, env = process.env) {
   } catch (e) {
     if (e instanceof DuoError) return errText(`[${e.code}] ${e.message}`);
     log('tool-crash', name, String(e && e.stack || e));
-    return errText(`Lỗi nội bộ claude-duo: ${e && e.message}. Xem log: ~/.claude-duo/logs/duo.log`);
+    return errText(`claude-duo internal error: ${e && e.message}. See the log: ~/.claude-duo/logs/duo.log`);
   }
 }
 
@@ -261,7 +263,7 @@ export function serve(input = process.stdin, output = process.stdout) {
     try {
       if (method === 'initialize') {
         const want = params && params.protocolVersion;
-        send({ jsonrpc: '2.0', id, result: { protocolVersion: PROTOCOLS.includes(want) ? want : PROTOCOLS.at(-1), capabilities: { tools: { listChanged: false } }, serverInfo: SERVER, instructions: 'claude-duo: giao tiếp với peer Claude ở tài khoản còn lại. Xem skill duo-protocol.' } });
+        send({ jsonrpc: '2.0', id, result: { protocolVersion: PROTOCOLS.includes(want) ? want : PROTOCOLS.at(-1), capabilities: { tools: { listChanged: false } }, serverInfo: SERVER, instructions: 'claude-duo: talk to the Claude peer running under the other account on this Mac. Peer-to-peer messages are in English. See the duo-protocol skill.' } });
       } else if (method === 'ping') {
         if (isRequest) send({ jsonrpc: '2.0', id, result: {} });
       } else if (method === 'tools/list') {

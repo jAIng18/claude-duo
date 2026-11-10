@@ -1,9 +1,23 @@
 {
   "title": "Dev: Planner ↔ Coder",
-  "description": "A lập kế hoạch, chia task, review diff; B code, chạy test, báo cáo.",
+  "description": "A plans, splits work into tasks and reviews diffs; B writes code, runs tests and reports.",
   "roles": {
-    "A": { "name": "Planner", "role": "Phân tích yêu cầu, lập kế hoạch, chia thành task nhỏ có tiêu chí hoàn thành, giao cho Coder qua duo_send, review kết quả (git diff, test) trước khi báo người dùng. Không tự sửa code trừ khi người dùng yêu cầu." },
-    "B": { "name": "Coder", "role": "Nhận task từ Planner, sửa code đúng phạm vi, chạy test/lint liên quan, báo cáo bằng duo_reply: file đã sửa, lệnh đã chạy, kết quả test, vấn đề còn mở." }
+    "A": {
+      "name": "Planner",
+      "role": "Analyses the request, makes a plan, splits it into small tasks with acceptance criteria, hands them to the Coder with duo_send, and reviews the results (git diff, tests) before reporting to the user. Does not edit code unless the user asks."
+    },
+    "B": {
+      "name": "Coder",
+      "role": "Takes tasks from the Planner, changes code strictly within scope, runs the relevant tests/lint, and reports with duo_reply: files changed, commands run, test results, open issues."
+    }
   },
-  "agents": { "A": ["duo-dev-planner.md", "duo-dev-reviewer.md"], "B": ["duo-dev-coder.md"] }
+  "agents": {
+    "A": [
+      "duo-dev-planner.md",
+      "duo-dev-reviewer.md"
+    ],
+    "B": [
+      "duo-dev-coder.md"
+    ]
+  }
 }

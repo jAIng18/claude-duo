@@ -48,8 +48,8 @@ function sessionStart(cfg, me, input) {
   maybeGc(cfg);
   kickDetached();
   const pend = pendingFor(me, sid);
-  const lines = [`${BOOT_PREFIX} Phiên này là peer ${label(cfg, me)} trong claude-duo. Peer còn lại: ${label(cfg, me === 'A' ? 'B' : 'A')}. Dùng các tool duo_* để giao việc / trả lời.`];
-  if (pend.length) lines.push(`Có ${pend.length} message đang chờ bạn:`, ...pend.slice(0, 5).map((m) => `- ${summary(m)}`), 'Hỏi người dùng có muốn xử lý không (tool duo_get).');
+  const lines = [`${BOOT_PREFIX} This session is peer ${label(cfg, me)} in claude-duo. The other peer is ${label(cfg, me === 'A' ? 'B' : 'A')}. Use the duo_* tools to delegate or reply; messages between peers are written in English.`];
+  if (pend.length) lines.push(`${pend.length} message(s) waiting for you:`, ...pend.slice(0, 5).map((m) => `- ${summary(m)}`), 'Ask the user whether to handle them (duo_get).');
   return ctx('SessionStart', lines.join('\n'));
 }
 
@@ -83,8 +83,8 @@ function userPromptSubmit(cfg, me, input) {
     ...(cur.pid ? {} : { pid: findClaudePid(), tmux: tmuxFromEnv(), cwd: input.cwd ? path.resolve(input.cwd) : null }),
   });
   if (!fresh.length) return {};
-  return ctx('UserPromptSubmit', [`${BOOT_PREFIX} Có message mới cho bạn (chưa xử lý):`, ...fresh.slice(0, 5).map((m) => `- ${summary(m)}`),
-    'Không cần xử lý ngay; cuối lượt này hãy nhắc người dùng.'].join('\n'));
+  return ctx('UserPromptSubmit', [`${BOOT_PREFIX} New message(s) for you, not handled yet:`, ...fresh.slice(0, 5).map((m) => `- ${summary(m)}`),
+    'No need to handle them right now; mention them to the user at the end of this turn.'].join('\n'));
 }
 
 function notification(cfg, me, input) {
@@ -93,7 +93,7 @@ function notification(cfg, me, input) {
   upsertSession(me, sid, { state: 'awaiting_user', last_event: 'Notification' });
   const bg = getBg(me);
   if (cfg.notify && bg && bg.session_id === sid) {
-    notify(`claude-duo: ${label(cfg, me)} cần bạn duyệt quyền`, `Phiên nền đang chờ. Chạy: duo attach ${me}`);
+    notify(`claude-duo: ${label(cfg, me)} needs your approval`, `The background session is waiting. Run: duo attach ${me}`);
   }
   return {};
 }
@@ -117,11 +117,11 @@ async function stop(cfg, me, input) {
     const n = m.meta.reminders || 0;
     if (n < cfg.limits.max_reply_reminders) {
       updateMessage(m.id, (x) => { x.meta.reminders = n + 1; });
-      return block(`${BOOT_PREFIX} Bạn chưa gọi duo_reply cho message ${m.id} ("${m.title}"). Nếu đã xong, gọi duo_reply (status "done" hoặc "failed") với tóm tắt kết quả. Nếu cần hỏi thêm, gọi duo_reply với status "needs_info".`);
+      return block(`${BOOT_PREFIX} You have not called duo_reply for message ${m.id} ("${m.title}"). If you are done, call duo_reply with status "done" or "failed" and a summary of the result (in English). If you need more information, call duo_reply with status "needs_info".`);
     }
     await reply(cfg, me, sid, {
       id: m.id, status: 'done', auto_result: true,
-      summary: String(input.last_assistant_message || '(phiên kết thúc mà không có câu trả lời)').slice(0, 20000),
+      summary: String(input.last_assistant_message || '(the session ended without an answer)').slice(0, 20000),
     }, { deliverMode: 'detached' });
     log('auto-result', m.id);
   }

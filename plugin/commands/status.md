@@ -1,4 +1,4 @@
 ---
-description: Trạng thái claude-duo (2 tài khoản, phiên đang mở, việc đang chờ)
+description: claude-duo status (both accounts, open sessions, pending work)
 ---
-Gọi `duo_status` và tóm tắt cho người dùng bằng tiếng Việt, dễ hiểu: phiên này là peer nào (tên, vai trò), peer kia đang có phiên nào mở (rảnh / bận / chờ duyệt quyền), các message chưa xong ở mỗi bên, cách giao nhận đang cấu hình cho từng chiều. Nếu có gì bất thường (ví dụ message bị kẹt "queued" lâu), đề xuất cách xử lý.
+Call `duo_status` and summarise it for the user in their language, in plain words: which peer this session is (name, role), which sessions the other peer has open (idle / busy / waiting for permission), unfinished messages on each side, and the delivery mode for each direction. If something looks wrong (e.g. a message stuck in "queued"), suggest how to fix it.

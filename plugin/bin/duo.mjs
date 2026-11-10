@@ -22,7 +22,7 @@ import { runClaude, stopBg } from '../lib/claude.mjs';
 import { listExamples, installExample } from '../lib/examples.mjs';
 import { tmux, hasTmux, SOCKET_NAME } from '../lib/tmux.mjs';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 const MARKETPLACE = 'claude-duo';
 const PLUGIN_ID = `duo@${MARKETPLACE}`;
 const ZSHRC_BEGIN = '# >>> claude-duo >>>';
@@ -258,7 +258,7 @@ async function selfTest(opt) {
   const t0 = Date.now();
   const r = await A.send(cfg, from, null, {
     type: 'task', title: 'claude-duo test: pong',
-    body: 'Đây là bài kiểm tra kết nối của claude-duo. KHÔNG dùng tool nào khác, KHÔNG sửa file. Chỉ gọi duo_reply với status "done" và summary đúng một chữ: pong',
+    body: 'This is a claude-duo connectivity test. Do NOT use any other tool and do NOT edit files. Just call duo_reply with status "done" and summary exactly: pong',
     cwd: opt.cwd ? String(opt.cwd) : process.cwd(), delivery: opt.delivery, user_confirmed: true,
   });
   console.log(`\nĐã gửi ${r.message.id} (${from}→${r.message.to}): ${JSON.stringify(r.delivery)}`);
