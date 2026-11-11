@@ -7,7 +7,7 @@
       "name": "duo",
       "source": "./plugin",
       "description": "Hộp thư, MCP tools, hooks và lệnh /duo:* để 2 phiên Claude Code (2 tài khoản) làm việc với nhau.",
-      "version": "0.5.0"
+      "version": "0.6.0"
     }
   ]
 }

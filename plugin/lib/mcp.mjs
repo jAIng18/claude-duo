@@ -9,8 +9,9 @@ import * as A from './actions.mjs';
 import { summary } from './mailbox.mjs';
 import { listExamples, installExample } from './examples.mjs';
 import { log } from './fsutil.mjs';
+import { historyRows, totals, fmtTime, fmtDuration, fmtTokens, fmtCost } from './history.mjs';
 
-const SERVER = { name: 'duo', version: '0.5.0' };
+const SERVER = { name: 'duo', version: '0.6.0' };
 const PROTOCOLS = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'];
 
 const idProp = { type: 'string', description: 'Message id, format YYYYMMDD-HHMMSS-xxxx' };
@@ -102,6 +103,19 @@ export const TOOLS = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
+    name: 'duo_log',
+    description: 'History of the work handed between the two peers (tasks and questions, oldest first): status, how long each waited and ran, tokens and estimated cost on the receiving side, plus totals per direction. Read-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        peer: { type: 'string', enum: ['A', 'B'], description: 'Only work received (done) by this peer. Default: both directions' },
+        days: { type: 'number', exclusiveMinimum: 0, description: 'Only work sent in the last N days' },
+        limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Rows to return, most recent (default 20). Totals always cover every matching item.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'duo_config',
     description: 'View / create / change the claude-duo configuration. action=get (optional key, dotted a.b.c), action=init (create a new configuration; values = overrides of the defaults), action=set (key + value). init/set ONLY after the user agreed, with user_confirmed=true.',
     inputSchema: {
@@ -191,6 +205,46 @@ const handlers = {
   },
   async duo_status(a, cfg, me) {
     return text(JSON.stringify(A.status(cfg, me), null, 2));
+  },
+  async duo_log(a, cfg) {
+    const to = a.peer === undefined ? null : String(a.peer).toUpperCase();
+    if (to !== null && !['A', 'B'].includes(to)) throw new DuoError('bad_args', 'peer must be A or B');
+    const days = a.days === undefined ? null : Number(a.days);
+    if (days !== null && !(days > 0)) throw new DuoError('bad_args', 'days must be a positive number');
+    const limit = a.limit === undefined ? 20 : Number(a.limit);
+    if (!(Number.isInteger(limit) && limit >= 1 && limit <= 200)) throw new DuoError('bad_args', 'limit must be an integer 1-200');
+    const all = historyRows(cfg, { to, since: days ? Date.now() - days * 86400000 : null });
+    const shown = all.slice(-limit);
+    const per = {};
+    for (const [f, t] of [['A', 'B'], ['B', 'A']]) {
+      const sub = all.filter((r) => r.from === f && r.to === t);
+      if (!sub.length) continue;
+      const x = totals(sub);
+      per[`${f}_to_${t}`] = {
+        worker: label(cfg, t), count: x.count, done: x.done, failed: x.failed, unfinished: x.open,
+        work: fmtDuration(x.work_ms), tokens_in: fmtTokens(x.total_in), tokens_out: fmtTokens(x.output),
+        cost: x.with_cost ? fmtCost(x.cost_usd) : '-', measured_tokens: `${x.with_usage}/${x.count}`, known_cost: `${x.with_cost}/${x.with_usage}`,
+      };
+    }
+    return text(JSON.stringify({
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'local',
+      // Display-ready values: show them as they are, do not recompute.
+      rows: shown.map((r) => ({
+        id: r.id, sent: fmtTime(r.created_at), direction: `${r.from}→${r.to}`, type: r.type, title: r.title,
+        status: r.auto_result ? `${r.status} (auto-result)` : r.status, error: r.error,
+        wait: fmtDuration(r.wait_ms), work: fmtDuration(r.work_ms),
+        tokens_in: r.usage ? fmtTokens(r.usage.total_in) : '-', tokens_out: r.usage ? fmtTokens(r.usage.output) : '-',
+        cost: r.usage ? fmtCost(r.usage.cost_usd) : '-',
+      })),
+      hidden_older: all.length - shown.length,
+      totals: per,
+      notes: [
+        'All values are already formatted for display (times in the local timezone): show them as they are. wait = sent -> receiver started; work = started -> result returned.',
+        'tokens_in includes cache reads/writes. cost is Claude Code\'s own API-price estimate for the receiving side only; Pro/Max plans are not billed per token.',
+        'cost "-": Claude Code writes the cost only when a session stops. Either the session is still open (the number appears after it takes its next task or exits), or the session did other work before stopping, so this task\'s share cannot be separated (tokens are still exact). tokens "-": transcript not found.',
+        `History is kept ${cfg.retention_days} days (retention_days). In a terminal: duo log.`,
+      ],
+    }, null, 1));
   },
   async duo_examples(a, cfg) {
     if (a.action === 'list') return text(listExamples().map((e) => `- ${e.name}: ${e.title} — ${e.description}\n  A: ${e.roles.A.name} · B: ${e.roles.B.name}`).join('\n') || '(none)');

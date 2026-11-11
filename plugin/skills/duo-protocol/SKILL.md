@@ -51,6 +51,7 @@ Use `duo_send` when the user asks you to hand something to the other peer, or wh
 | Tool | Purpose |
 |---|---|
 | `duo_status` | Who am I, sessions, pending messages, delivery settings |
+| `duo_log` | History of handed-over work: wait/work time, tokens, estimated cost (read-only) |
 | `duo_inbox` | List messages to me (`sent: true` = what I sent) |
 | `duo_get` / `duo_accept` / `duo_reject` | Read / accept / refuse a message |
 | `duo_reply` | Answer a task or question (mandatory when done) |

@@ -159,7 +159,7 @@ test('MCP: handshake, tools/list, unknown method, tool calls', async () => {
     s.notify('notifications/initialized');
     const list = await s.call('tools/list', {});
     const names = list.result.tools.map((t) => t.name);
-    assert.deepEqual(names.sort(), ['duo_accept', 'duo_cancel', 'duo_config', 'duo_examples', 'duo_get', 'duo_inbox', 'duo_reject', 'duo_reply', 'duo_send', 'duo_status', 'duo_wait'].sort());
+    assert.deepEqual(names.sort(), ['duo_accept', 'duo_cancel', 'duo_config', 'duo_examples', 'duo_get', 'duo_inbox', 'duo_log', 'duo_reject', 'duo_reply', 'duo_send', 'duo_status', 'duo_wait'].sort());
     for (const t of list.result.tools) assert.equal(t.inputSchema.type, 'object');
     const unk = await s.call('server/discover', {});
     assert.equal(unk.error.code, -32601);
@@ -176,6 +176,12 @@ test('MCP: handshake, tools/list, unknown method, tool calls', async () => {
     assert.match(cfgNo.result.content[0].text, /approval_required/);
     const cfgDev = await s.call('tools/call', { name: 'duo_config', arguments: { action: 'set', key: 'dev.plugin_dir', value: '/x', user_confirmed: true } });
     assert.equal(cfgDev.result.isError, true);
+    const lg = await s.call('tools/call', { name: 'duo_log', arguments: { peer: 'B', limit: 5 } });
+    assert.ok(!lg.result.isError, lg.result.content[0].text);
+    const lj = JSON.parse(lg.result.content[0].text);
+    assert.ok(Array.isArray(lj.rows) && Array.isArray(lj.notes));
+    const lgBad = await s.call('tools/call', { name: 'duo_log', arguments: { limit: 0 } });
+    assert.equal(lgBad.result.isError, true);
     const ex = await s.call('tools/call', { name: 'duo_examples', arguments: { action: 'list' } });
     assert.match(ex.result.content[0].text, /dev: Dev: Planner ↔ Coder/);
   } finally { s.close(); }
@@ -206,4 +212,18 @@ test('CLI: init refuses to overwrite, config set validates', () => {
   const st = spawnSync(process.execPath, [DUO, 'status'], { env: sb.envA, encoding: 'utf8' });
   assert.equal(st.status, 0, st.stderr);
   assert.match(st.stdout, /A→B background/);
+});
+
+test('CLI: duo log prints a table and valid JSON', () => {
+  const r = spawnSync(process.execPath, [DUO, 'log', '--no-usage'], { env: sb.envA, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Lúc|chưa có việc nào/);
+  const j = spawnSync(process.execPath, [DUO, 'log', 'B', '--json', '--days', '7'], { env: sb.envA, encoding: 'utf8' });
+  assert.equal(j.status, 0, j.stderr);
+  const out = JSON.parse(j.stdout);
+  assert.ok(Array.isArray(out.rows));
+  assert.equal(typeof out.totals.count, 'number');
+  const bad = spawnSync(process.execPath, [DUO, 'log', '--limit', '0'], { env: sb.envA, encoding: 'utf8' });
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /bad_args/);
 });

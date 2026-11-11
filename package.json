@@ -1,6 +1,6 @@
 {
   "name": "claude-duo",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Hai tài khoản Claude Code trên cùng một máy macOS giao việc và trả kết quả cho nhau.",
   "type": "module",

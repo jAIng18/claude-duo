@@ -21,8 +21,9 @@ import { addPermissionRule, removePermissionRule, pluginState } from '../lib/set
 import { runClaude, stopBg } from '../lib/claude.mjs';
 import { listExamples, installExample } from '../lib/examples.mjs';
 import { tmux, hasTmux, SOCKET_NAME } from '../lib/tmux.mjs';
+import { historyRows, formatHistory, totals } from '../lib/history.mjs';
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 const MARKETPLACE = 'claude-duo';
 const PLUGIN_ID = `duo@${MARKETPLACE}`;
 const ZSHRC_BEGIN = '# >>> claude-duo >>>';
@@ -60,6 +61,8 @@ Dùng hằng ngày:
   duo status                     Trạng thái 2 peer, phiên đang mở, message đang chờ
   duo inbox [A|B] [--all]        Hộp thư (mặc định: cả hai, chỉ message chưa xong)
   duo show <id>                  Xem một message
+  duo log [A|B] [--days N] [--limit N] [--json] [--no-usage]
+                                 Lịch sử việc đã giao: thời gian chờ/làm, token, chi phí ước tính
   duo open <A|B> [--cwd DIR]     Mở phiên Claude của peer (trong tmux nếu có)
   duo attach <A|B>               Xem phiên chạy nền của peer
   duo doctor                     Kiểm tra cài đặt, kèm cách sửa
@@ -153,6 +156,19 @@ async function main() {
       console.log(A.render(m));
       console.log('\n-- giao nhận --');
       for (const e of m.meta.delivery_log || []) console.log(`${e.at} ${JSON.stringify({ ...e, at: undefined })}`);
+      return 0;
+    }
+    case 'log': {
+      const cfg = loadConfig();
+      const to = pos[0] ? peerArg(pos[0]) : null;
+      const days = opt.days !== undefined ? Number(opt.days) : null;
+      if (days !== null && !(days > 0)) throw new DuoError('bad_args', '--days phải là số dương');
+      const limit = opt.limit !== undefined ? Number(opt.limit) : 20;
+      if (!(Number.isInteger(limit) && limit > 0)) throw new DuoError('bad_args', '--limit phải là số nguyên dương');
+      const all = historyRows(cfg, { to, since: days ? Date.now() - days * 86400000 : null, usage: !opt['no-usage'] });
+      const shown = all.slice(-limit);
+      if (opt.json) { console.log(JSON.stringify({ rows: shown, totals: totals(all) }, null, 2)); return 0; }
+      console.log(formatHistory(cfg, shown, { all, limit }));
       return 0;
     }
     case 'send': {

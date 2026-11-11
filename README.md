@@ -111,6 +111,7 @@ Plain `claude` already loads claude-duo for account A, so nothing changes in how
 | See waiting messages | `/duo:inbox` |
 | See the overall status | `/duo:status` |
 | Change settings | `/duo:config <what to change>` |
+| See past work: how long each task waited and ran, tokens and estimated cost | `/duo:log` (e.g. `/duo:log B this week`), or `duo log` in a terminal (`duo log B` = only work done by B, `--days 7`, `--limit 50`, `--json`) |
 
 By default, Claude shows you the draft and asks before sending. The other account then works **in the background** (no extra windows) and the result comes back in the same conversation. The two Claudes talk to each other in English; they still talk to you in your language.
 

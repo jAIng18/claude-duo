@@ -368,6 +368,7 @@ Tất cả hook gọi `bin/duo hook <event>`. Yêu cầu: chạy **dưới 300 m
 | `duo_wait` | `id`, `timeout_s` (mặc định 600, tối đa 3600) | `result` hoặc `timeout` | Dùng khi bên gửi cần kết quả ngay mới làm tiếp được. Poll mailbox mỗi 2 giây. |
 | `duo_cancel` | `id`, `reason?` | ok | Đánh dấu `cancelled`. Nếu bên nhận đã bắt đầu làm, gửi thêm message `cancel` tới **đúng phiên đang xử lý** (`wake_session = handler_session`). Không `claude stop` phiên nền, vì phiên đó có thể đang giữ ngữ cảnh của các việc khác. |
 | `duo_status` | — | Peer, online/idle/busy, số message theo trạng thái, mode hiện tại | |
+| `duo_log` | `peer?`, `days?`, `limit?` | các dòng lịch sử + tổng theo chiều + ghi chú (JSON) | (thêm ở 18.7) Chỉ đọc. |
 | `duo_accept` | `id` | ok | (thêm khi triển khai) Chấp nhận task khi `before_accept: ask`, sau khi người dùng đồng ý. |
 | `duo_config` | `action` (`get`\|`set`\|`init`), `key?`, `value?`, `values?`, `user_confirmed?` | cấu hình | (thêm khi triển khai) `set`/`init` bắt buộc `user_confirmed`. Không cho đặt `dev.*`, không cho `spawn.permission_mode = bypassPermissions`. |
 | `duo_examples` | `action` (`list`\|`install`), `name?`, `overwrite?`, `user_confirmed?` | danh sách / kết quả cài | (thêm khi triển khai) Copy agent vào `<config_dir>/agents/` của từng peer và đặt vai trò. |
@@ -386,6 +387,7 @@ Tên đầy đủ mà Claude thấy: `mcp__plugin_duo_duo__<tool>`. Quy tắc qu
 | `/duo:send <nội dung>` | Soạn message cho bên kia. Claude giúp viết lại cho tự chứa ngữ cảnh, **cho người dùng xem trước khi gửi**. |
 | `/duo:inbox` | Liệt kê tin đến và hỏi muốn xử lý tin nào. |
 | `/duo:status` | Hiển thị `duo_status` dưới dạng dễ đọc. |
+| `/duo:log` | Hiển thị `duo_log` thành bảng và dòng tổng, bằng ngôn ngữ của người dùng. |
 | `/duo:test` | Gửi một task thử ("trả lời pong") theo mode đã cấu hình, chờ bằng `duo_wait` và báo kết quả. Trong terminal có thêm `duo test` (kiểm tra cài đặt) và `duo test --live` (gửi thật). |
 | `/duo:config` | Xem và sửa nhanh cấu hình bằng lời ("chuyển chiều A→B sang new-tab"). |
 
@@ -663,4 +665,12 @@ claude-duo/                         ← repo = marketplace "claude-duo"
   - Hook `SessionStart` chạy `duo kick --peer <me>`: khi tài khoản vừa mở phiên (ví dụ ngay sau `/login`), mọi message đang chờ cho nó được giao lại **ngay**.
   - Chống xử lý trùng: `duo_get` / `duo_reply` từ chối nếu message đang được một phiên **còn sống** khác của cùng tài khoản xử lý. Phiên đó đã chết thì phiên mới tiếp quản. `kick` bỏ qua message đã được một phiên còn sống nhận.
 - **Đã kiểm:** gửi cho B chưa đăng nhập → `auth_required` đúng hướng dẫn, không tạo thư mục, `kick` thường bỏ qua, `kick --peer B` thử lại ngay. Sau khi B "đăng nhập" (trỏ sang tài khoản thật), `kick --peer B` giao tự động và nhận "pong", không cần gửi lại.
+
+### 18.7 `duo log` — lịch sử, thời gian và token (2026-11-11)
+- **Lệnh:** `/duo:log` trong Claude (tool MCP `duo_log`, trả JSON đã format sẵn: giờ địa phương, `5s`, `204k`, `$0.475`, để Claude chép nguyên văn, không tự đổi), hoặc `duo log [A|B] [--days N] [--limit N] [--json] [--no-usage]`. Mỗi dòng là một `task`/`question`: lúc gửi, chiều, trạng thái, **Chờ** (gửi → `picked_up_at`, không có thì `accepted_at`), **Làm** (bắt đầu → `replied_at`), token vào (gồm cache) và ra, chi phí ước tính, tiêu đề. Cuối bảng có dòng tổng theo từng chiều. `[A|B]` lọc theo bên nhận; mặc định hiện 20 việc gần nhất, dòng tổng tính trên mọi việc đã lọc. Trả lời một phần câu hỏi 17.2-4.
+- **Nguồn số liệu** (`plugin/lib/usage.mjs`): transcript của phiên bên nhận `<config_dir>/projects/*/<handler_session>.jsonl`, cộng các transcript subagent trong `<handler_session>/`. Cửa sổ của một task bắt đầu ở dòng đầu tiên chứa id của nó (prompt bootstrap hoặc lúc `Stop` nhặt việc) và kết thúc ở prompt mới đầu tiên sau `replied_at`. Nhờ vậy vòng `needs_info` vẫn được tính vào task. Mỗi API message chỉ cộng một lần (transcript ghi lại message đó cho từng content block).
+- **Chi phí** = phần tăng của `cost-state.totalCostUSD` (số cộng dồn Claude Code tự tính theo giá API) trong cửa sổ. Claude Code chỉ ghi `cost-state` **khi phiên dừng**. Với phiên nền, phiên bị stop rồi resume mỗi khi có task mới, nên chi phí của task mới nhất chỉ có sau khi phiên nhận task kế tiếp hoặc tắt (đã kiểm: `nbh5` từ `-` thành $0.475 khi `dgxs` tới). Không tự tính tiền từ token để khỏi phải giữ bảng giá. Nếu phiên làm thêm việc khác (ví dụ nhận một RESULT) trước khi dừng thì `cost-state` rơi ra ngoài cửa sổ và chi phí của task là `-`: không chia được, nhưng token vẫn đúng.
+- **Giới hạn:** định dạng transcript là của Claude Code, không có tài liệu chính thức, nên mọi bước đều là best effort (không đọc được thì hiện `-`, không báo lỗi). Chỉ tính phía bên nhận. Trong phiên tương tác, nếu người dùng chat xen vào lúc task đang chạy thì phần đó cũng bị cộng vào. Lịch sử chỉ còn trong `retention_days`.
+- **Phiên bản 0.6.0.** Plugin được đọc thẳng từ thư mục repo (marketplace kiểu `directory`); thay đổi có hiệu lực ở phiên mới. Đã kiểm `claude -p "/duo:log B tuần này"` trên tài khoản A thật: gọi `duo_log {peer: B, days: 7}` đúng một lần, bảng tiếng Việt khớp `duo log`.
+- **Đã kiểm:** 44/44 test (thêm test transcript giả: trùng message id, subagent, prompt người dùng sau task, `cost-state` cộng dồn, CLI `--json`/`--limit`). Trên máy thật: số token và chi phí của `mp60` / `uksj` khớp tay với transcript (202 144 token vào, $0.472 và $0.614), 2 lần `duo test --live` mới hiện đúng trong `duo log`.
 

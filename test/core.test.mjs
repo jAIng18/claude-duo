@@ -300,3 +300,68 @@ test('never overwrites a settings.json it cannot parse', () => {
   assert.equal(fs.readFileSync(f, 'utf8'), '{ broken');
   fs.rmSync(f);
 });
+
+// ------------------------------------------------------------------ duo log (usage from transcripts)
+test('duo log: per-task tokens and cost from the receiver transcript', async () => {
+  const U = await import('../plugin/lib/usage.mjs');
+  const H = await import('../plugin/lib/history.mjs');
+  const SID = 'cccccccc-0000-0000-0000-000000000003';
+  const mk = async (title) => (await A.send(cfg, 'A', SID_A, { type: 'task', title, body: 'b', cwd: sb.root }, { deliverNow: false })).message;
+  const t1 = await mk('log one'); const t2 = await mk('log two'); const t3 = await mk('log three (no transcript)');
+  for (const t of [t1, t2]) await A.reply(cfg, 'B', SID, { id: t.id, status: 'done', summary: 'ok' }, { deliverMode: 'none' });
+  const at = (s) => new Date(Date.UTC(2026, 10, 10, 10, 0, s)).toISOString();
+  M.updateMessage(t1.id, (x) => { x.created_at = at(0); x.meta.picked_up_at = at(1); x.meta.replied_at = at(5); });
+  M.updateMessage(t2.id, (x) => { x.created_at = at(8); x.meta.picked_up_at = at(10); x.meta.replied_at = at(12); });
+
+  const usage = (input, cw, cr, out) => ({ input_tokens: input, cache_creation_input_tokens: cw, cache_read_input_tokens: cr, output_tokens: out });
+  const asst = (s, id, u) => ({ type: 'assistant', timestamp: at(s), message: { id, model: 'claude-test', usage: u } });
+  const cost = (s, v) => ({ type: 'cost-state', timestamp: at(s), totalCostUSD: v });
+  const prompt = (s, text) => ({ type: 'user', timestamp: at(s), message: { role: 'user', content: text } });
+  const toolResult = (s) => ({ type: 'user', timestamp: at(s), message: { role: 'user', content: [{ type: 'tool_result', content: 'x' }] } });
+  const dir = path.join(sb.b, 'projects', '-tmp-proj');
+  fs.mkdirSync(path.join(dir, SID, 'subagents'), { recursive: true });
+  const lines = [
+    cost(0, 0.10),
+    prompt(1, `[claude-duo] New TASK ${t1.id} from A: "log one".`),
+    asst(2, 'm1', usage(2, 1000, 0, 50)),
+    asst(2, 'm1', usage(2, 1000, 0, 50)), // same API message, second content block
+    toolResult(3),
+    asst(4, 'm2', usage(1, 10, 1000, 20)),
+    asst(6, 'm3', usage(1, 0, 1010, 5)), // final words after duo_reply still count
+    cost(6, 0.35),
+    prompt(10, `[claude-duo] New TASK ${t2.id} from A: "log two".`),
+    asst(11, 'm4', usage(3, 100, 2000, 30)),
+    cost(13, 0.50),
+    prompt(20, 'hello from the human'),
+    asst(21, 'm5', usage(5, 0, 0, 999)), // not part of t2
+    cost(22, 0.90),
+  ];
+  fs.writeFileSync(path.join(dir, `${SID}.jsonl`), `${lines.map((l) => JSON.stringify(l)).join('\n')}\n{ not json\n`);
+  fs.writeFileSync(path.join(dir, SID, 'subagents', 'agent-1.jsonl'), `${JSON.stringify(asst(4, 's1', usage(7, 0, 0, 7)))}\n`);
+  U.clearUsageCache();
+
+  const u1 = U.taskUsage(cfg, M.getMessage(t1.id));
+  assert.deepEqual({ ...u1, file: undefined }, { input: 11, cache_write: 1010, cache_read: 2010, output: 82, turns: 4, models: ['claude-test'], total_in: 3031, cost_usd: 0.25, file: undefined });
+  const u2 = U.taskUsage(cfg, M.getMessage(t2.id));
+  assert.equal(u2.output, 30);
+  assert.equal(u2.total_in, 2103);
+  assert.equal(u2.cost_usd, 0.15);
+  assert.equal(U.taskUsage(cfg, M.getMessage(t3.id)), null); // not picked up yet
+
+  const rows = H.historyRows(cfg, { to: 'B' }).filter((r) => [t1.id, t2.id, t3.id].includes(r.id));
+  assert.equal(rows.length, 3);
+  const r1 = rows.find((r) => r.id === t1.id);
+  assert.equal(r1.wait_ms, 1000);
+  assert.equal(r1.work_ms, 4000);
+  assert.equal(rows.find((r) => r.id === t3.id).status, 'queued');
+  const tot = H.totals(rows);
+  assert.equal(tot.done, 2); assert.equal(tot.open, 1); assert.equal(tot.with_usage, 2);
+  assert.equal(tot.cost_usd, 0.4);
+  const text = H.formatHistory(cfg, rows);
+  assert.match(text, /log one/);
+  assert.match(text, /\$0\.250/);
+  assert.match(text, /đo được 2\/3 việc/);
+  assert.equal(H.historyRows(cfg, { since: Date.now() + 60000 }).length, 0);
+  assert.equal(H.fmtDuration(65000), '1m05s');
+  assert.equal(H.fmtTokens(202144), '202k');
+});
