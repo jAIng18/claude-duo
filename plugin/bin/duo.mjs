@@ -22,6 +22,8 @@ import { runClaude, stopBg } from '../lib/claude.mjs';
 import { listExamples, installExample } from '../lib/examples.mjs';
 import { tmux, hasTmux, SOCKET_NAME } from '../lib/tmux.mjs';
 import { historyRows, formatHistory, totals } from '../lib/history.mjs';
+import { QuotaWatcher, formatQuota } from '../lib/quota.mjs';
+import { startMonitor, stopMonitor } from '../lib/monitor.mjs';
 
 const VERSION = '0.6.0';
 const MARKETPLACE = 'claude-duo';
@@ -63,6 +65,8 @@ Dùng hằng ngày:
   duo show <id>                  Xem một message
   duo log [A|B] [--days N] [--limit N] [--json] [--no-usage]
                                  Lịch sử việc đã giao: thời gian chờ/làm, token, chi phí ước tính
+  duo quota [--json] [--watch]   Quota 5 giờ / tuần của 2 account (giống /usage)
+  duo monitor [stop|--rebuild]   Cửa sổ nhỏ theo dõi quota 2 account, cập nhật trực tiếp
   duo open <A|B> [--cwd DIR]     Mở phiên Claude của peer (trong tmux nếu có)
   duo attach <A|B>               Xem phiên chạy nền của peer
   duo doctor                     Kiểm tra cài đặt, kèm cách sửa
@@ -169,6 +173,32 @@ async function main() {
       const shown = all.slice(-limit);
       if (opt.json) { console.log(JSON.stringify({ rows: shown, totals: totals(all) }, null, 2)); return 0; }
       console.log(formatHistory(cfg, shown, { all, limit }));
+      return 0;
+    }
+    case 'quota': {
+      const cfg = loadConfig();
+      if (opt.watch) {
+        // One JSON line per change (used by the monitor window). stdin: "refresh" forces
+        // a new quota request; stdin closing (the window quit) ends the process.
+        const w = new QuotaWatcher(cfg, { onChange: (s) => process.stdout.write(`${JSON.stringify(s)}\n`) });
+        process.stdout.on('error', () => process.exit(0));
+        process.stdin.setEncoding('utf8');
+        process.stdin.on('data', (d) => { if (/refresh/.test(d)) w.tick({ force: true }).catch(() => {}); });
+        process.stdin.on('end', () => process.exit(0));
+        await w.start();
+        return null; // keep running
+      }
+      const w = new QuotaWatcher(cfg);
+      await w.tick({ force: true });
+      const snap = w.snapshot();
+      console.log(opt.json ? JSON.stringify(snap, null, 2) : formatQuota(snap));
+      return 0;
+    }
+    case 'monitor': {
+      const cfg = loadConfig();
+      if (pos[0] === 'stop') { console.log(stopMonitor() ? 'Đã tắt khung theo dõi.' : 'Khung theo dõi không chạy.'); return 0; }
+      const r = startMonitor(cfg, { rebuild: !!opt.rebuild });
+      console.log(r.already ? 'Khung theo dõi đang mở, đã đưa lên trước.' : `Đã mở khung theo dõi (pid ${r.pid}). Gọi lại bằng Cmd+Tab hoặc icon trên Dock; tắt bằng nút ×, Cmd+Q hoặc: duo monitor stop`);
       return 0;
     }
     case 'send': {

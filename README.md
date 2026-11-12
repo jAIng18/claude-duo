@@ -125,6 +125,22 @@ By default, Claude shows you the draft and asks before sending. The other accoun
 
 Change it with `/duo:config`, e.g. *"show B's work in a new window"*.
 
+### Watching the quota of both accounts
+
+```bash
+duo monitor          # small window; run it again to bring it to the front, `duo monitor stop` closes it
+duo quota            # the same numbers once, in the terminal (--json for scripts)
+```
+
+The window shows, for each account: the plan, the 5-hour and weekly limits (the same numbers as `/usage`) with time until reset, whether the account is working, idle or waiting for you, open claude-duo tasks, and the tokens used in the last 5 hours. The arrows button shrinks it to just the two account icons (a dot shows each one's state; hover for the numbers, click an icon to expand again).
+
+It behaves like any other app: it has a Dock icon, shows up in Cmd+Tab and goes behind other apps when you switch away. The pin button keeps it on top of every window (and on every Space) until you unpin it. Drag it anywhere; it remembers where you left it. Cmd+Q or × quits.
+
+- It updates on its own: activity shows within a second or two; the quota percentages are asked again at most every 20 s while an account works, every 2 min when idle.
+- The first `duo monitor` builds the window with Xcode Command Line Tools (`xcode-select --install` if missing), about 30 s.
+- Each account's login token is read from the macOS Keychain and sent only to Anthropic's usage endpoint. That endpoint is not a public API, so it may change; if it fails, the window says so and keeps the last known numbers.
+- **"Login expired"**: the account has not been used for a while, so its login token expired. Open it once (`claude` or `claude-b`) and the numbers come back by themselves.
+
 ## Troubleshooting
 
 - Run `duo doctor` in a terminal. It checks everything and tells you how to fix each problem.
