@@ -132,7 +132,7 @@ duo monitor          # small window; run it again to bring it to the front, `duo
 duo quota            # the same numbers once, in the terminal (--json for scripts)
 ```
 
-The window shows, for each account: the plan, the 5-hour and weekly limits (the same numbers as `/usage`) with time until reset, whether the account is working, idle or waiting for you, open claude-duo tasks, and the tokens used in the last 5 hours. The arrows button shrinks it to just the two account icons (a dot shows each one's state; hover for the numbers, click an icon to expand again).
+The window shows, for each account: the plan, the 5-hour and weekly limits (the same numbers as `/usage`) with time until reset, whether the account is working, idle or waiting for you, open claude-duo tasks, and the tokens used in the last 5 hours. The arrows button shrinks it to just the two account icons (a dot shows each one's state; hover for the numbers). Next to them, ↗ opens the full view again (clicking an icon does too) and × quits.
 
 It behaves like any other app: it has a Dock icon, shows up in Cmd+Tab and goes behind other apps when you switch away. The pin button keeps it on top of every window (and on every Space) until you unpin it. Drag it anywhere; it remembers where you left it. Cmd+Q or × quits.
 

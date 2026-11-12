@@ -321,12 +321,13 @@ struct CompactIcon: View {
 struct IconButton: View {
     let symbol: String
     let help: String
+    var size: CGFloat = 22
     let action: () -> Void
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
-                .frame(width: 22, height: 22)
+                .font(.system(size: size * 0.5, weight: .semibold))
+                .frame(width: size, height: size)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -342,14 +343,20 @@ struct MonitorView: View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             let now = ctx.date
             if store.compact {
-                // Click an icon to expand; drag the space around them to move the window.
+                // Click an icon (or ↗) to expand; drag the space around them to move the window.
                 HStack(spacing: 10) {
                     ForEach(["A", "B"], id: \.self) { k in
                         CompactIcon(key_: k, peer: store.snap?.peers[k])
                             .onTapGesture { store.compact = false }
                     }
+                    VStack(spacing: 0) {
+                        IconButton(symbol: "arrow.up.left.and.arrow.down.right", help: "Expand", size: 16) { store.compact = false }
+                        IconButton(symbol: "xmark", help: "Quit", size: 16) { NSApp.terminate(nil) }
+                    }
+                    .padding(.leading, -2)
                 }
-                .padding(.horizontal, 12)
+                .padding(.leading, 12)
+                .padding(.trailing, 6)
                 .padding(.vertical, 9)
             } else {
             VStack(spacing: 0) {
