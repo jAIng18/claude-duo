@@ -23,6 +23,9 @@ import { PEERS, label } from './config.mjs';
 import { readJSON, writeJSONAtomic } from './fsutil.mjs';
 import { listSessions } from './registry.mjs';
 import { listMessages } from './mailbox.mjs';
+import { readSwitch, applyAuto } from './switch.mjs';
+import { notify } from './macos.mjs';
+import { log } from './fsutil.mjs';
 
 export const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 const WINDOW_MS = 5 * 3600 * 1000;
@@ -222,8 +225,8 @@ const cacheFile = (peer) => path.join(paths.state(), `quota-${peer}.json`);
  * while an account is active, every 2 min otherwise.
  */
 export class QuotaWatcher {
-  constructor(cfg, { onChange = () => {}, deps = {} } = {}) {
-    this.cfg = cfg; this.onChange = onChange; this.deps = deps;
+  constructor(cfg, { onChange = () => {}, deps = {}, autoSwitch = true } = {}) {
+    this.cfg = cfg; this.onChange = onChange; this.deps = deps; this.autoSwitch = autoSwitch;
     this.peers = {};
     for (const p of PEERS) {
       const cached = readJSON(cacheFile(p), null);
@@ -237,7 +240,9 @@ export class QuotaWatcher {
   }
 
   snapshot() {
-    const out = { at: new Date().toISOString(), peers: {} };
+    let sw = null;
+    try { sw = readSwitch(this.cfg); } catch { /* no duo home yet */ }
+    const out = { at: new Date().toISOString(), switch: sw, peers: {} };
     for (const p of PEERS) {
       const s = this.peers[p];
       out.peers[p] = {
@@ -297,6 +302,26 @@ export class QuotaWatcher {
       if (s.active && s.quota && s.quota.ok) s.next_at = Math.min(s.next_at, s.last_try + ACTIVE_EVERY_MS);
     }
     await Promise.all(PEERS.map((p) => this.refreshQuota(p, { force })));
+    this.checkAuto();
+  }
+
+  /** Auto mode: move `claude` to the other account when this one is full. */
+  checkAuto() {
+    if (!this.autoSwitch) return;
+    let r;
+    try { r = applyAuto(this.cfg, Object.fromEntries(PEERS.map((p) => [p, this.peers[p].quota]))); } catch { return; }
+    if (!r.switched) return;
+    log('switch', r.why);
+    const to = r.state.active;
+    const name = this.cfg.peers[to].name;
+    notify('claude-duo', `Đã tự chuyển sang ${name === to ? `account ${to}` : `${to} (${name})`}: lần gõ claude tới sẽ dùng account này.`).catch(() => {});
+    this._emit(true);
+  }
+
+  /** Something outside the watcher changed the switch (a click in the window). */
+  switchChanged() {
+    this.checkAuto();
+    this._emit(true);
   }
 
   start() {
@@ -363,5 +388,7 @@ export function formatQuota(snap, now = Date.now()) {
     if (x.tokens_5h) out.push(`  5 giờ qua trên máy này: ${x.tokens_5h.messages} lượt trả lời · ${fmtTokens(x.tokens_5h.output)} token ra`);
     out.push('');
   }
+  const sw = snap.switch;
+  if (sw) out.push(`Lệnh claude mở: ${sw.active} · ${sw.mode === 'auto' ? `tự chuyển khi tới ${sw.threshold}%` : 'chuyển tay (duo switch A|B)'}`);
   return out.join('\n').trimEnd();
 }

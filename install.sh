@@ -122,11 +122,13 @@ if [ "$ALIASES" = 1 ]; then
     printf "alias duo='node \"%s\"'\n" "$DUO"
     printf "alias claude-a='node \"%s\" open A --'\n" "$DUO"
     printf "alias claude-b='node \"%s\" open B --'\n" "$DUO"
+    echo "# claude-duo switch: \`claude\` mở account đang chọn (duo monitor / duo switch)"
+    printf "source \"%s\"\n" "$REPO/plugin/shell/claude-switch.zsh"
     echo "$END"
   } > "$TMP.new"
   cmp -s "$RC" "$TMP.new" || { cp "$RC" "$RC.bak-claude-duo"; mv "$TMP.new" "$RC"; }
   rm -f "$TMP" "$TMP.new"
-  ok "duo, claude-b, claude-a (mở terminal mới hoặc chạy: source ~/.zshrc)"
+  ok "duo, claude (mở account đang chọn), claude-b, claude-a (mở terminal mới hoặc chạy: source ~/.zshrc)"
 fi
 
 step "Kiểm tra"
