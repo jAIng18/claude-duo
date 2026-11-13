@@ -22,8 +22,9 @@ import { runClaude, stopBg } from '../lib/claude.mjs';
 import { listExamples, installExample } from '../lib/examples.mjs';
 import { tmux, hasTmux, SOCKET_NAME } from '../lib/tmux.mjs';
 import { historyRows, formatHistory, totals } from '../lib/history.mjs';
-import { QuotaWatcher, formatQuota } from '../lib/quota.mjs';
+import { QuotaWatcher, formatQuota, quotaFor } from '../lib/quota.mjs';
 import { startMonitor, stopMonitor } from '../lib/monitor.mjs';
+import { readSwitch, useAccount, setMode, resolveDir } from '../lib/switch.mjs';
 
 const VERSION = '0.6.0';
 const MARKETPLACE = 'claude-duo';
@@ -53,6 +54,10 @@ function peerArg(v, what = 'peer') {
   return p;
 }
 
+function hasClaudeFunction() {
+  try { return /claude-switch\.zsh/.test(fs.readFileSync(path.join(HOME, '.zshrc'), 'utf8')); } catch { return false; }
+}
+
 function readStdin() {
   try { return fs.readFileSync(0, 'utf8'); } catch { return ''; }
 }
@@ -66,7 +71,10 @@ Dùng hằng ngày:
   duo log [A|B] [--days N] [--limit N] [--json] [--no-usage]
                                  Lịch sử việc đã giao: thời gian chờ/làm, token, chi phí ước tính
   duo quota [--json] [--watch]   Quota 5 giờ / tuần của 2 account (giống /usage)
-  duo monitor [stop|--rebuild]   Cửa sổ nhỏ theo dõi quota 2 account, cập nhật trực tiếp
+  duo monitor [stop|--rebuild]   Cửa sổ nhỏ theo dõi quota 2 account, bấm vào account để chuyển
+  duo switch [A|B]               Chọn account mà lệnh \`claude\` sẽ mở (không đổi phiên đang mở)
+  duo switch auto [--at 90]      Tự chuyển sang account kia khi account này dùng tới 90%
+  duo switch manual              Tắt tự chuyển
   duo open <A|B> [--cwd DIR]     Mở phiên Claude của peer (trong tmux nếu có)
   duo attach <A|B>               Xem phiên chạy nền của peer
   duo doctor                     Kiểm tra cài đặt, kèm cách sửa
@@ -183,7 +191,20 @@ async function main() {
         const w = new QuotaWatcher(cfg, { onChange: (s) => process.stdout.write(`${JSON.stringify(s)}\n`) });
         process.stdout.on('error', () => process.exit(0));
         process.stdin.setEncoding('utf8');
-        process.stdin.on('data', (d) => { if (/refresh/.test(d)) w.tick({ force: true }).catch(() => {}); });
+        // Commands from the window, one per line: refresh · use A|B · mode manual|auto · threshold N
+        let rest = '';
+        process.stdin.on('data', (d) => {
+          const lines = (rest + d).split('\n'); rest = lines.pop();
+          for (const line of lines) {
+            const [c, arg] = line.trim().split(/\s+/);
+            try {
+              if (c === 'refresh') w.tick({ force: true }).catch(() => {});
+              else if (c === 'use') { useAccount(cfg, String(arg).toUpperCase()); w.switchChanged(); }
+              else if (c === 'mode') { setMode(cfg, arg); w.switchChanged(); }
+              else if (c === 'threshold') { setMode(cfg, readSwitch(cfg).mode, Number(arg)); w.switchChanged(); }
+            } catch { /* bad command from the window: ignore */ }
+          }
+        });
         process.stdin.on('end', () => process.exit(0));
         await w.start();
         return null; // keep running
@@ -192,6 +213,26 @@ async function main() {
       await w.tick({ force: true });
       const snap = w.snapshot();
       console.log(opt.json ? JSON.stringify(snap, null, 2) : formatQuota(snap));
+      return 0;
+    }
+    case 'switch': {
+      const cfg = loadConfig();
+      if (opt.resolve) {
+        // Called by the `claude` shell function on every launch: print a dir or nothing, never fail.
+        try { process.stdout.write(await resolveDir(cfg, { quotaFor })); } catch { /* plain claude */ }
+        return 0;
+      }
+      const a = String(pos[0] || '').toLowerCase();
+      if (a === 'a' || a === 'b') useAccount(cfg, a.toUpperCase());
+      else if (a === 'auto' || a === 'manual') setMode(cfg, a, opt.at !== undefined ? Number(opt.at) : undefined);
+      else if (a) throw new DuoError('bad_args', 'Dùng: duo switch [A|B|auto|manual] [--at N]');
+      const st = readSwitch(cfg);
+      if (opt.json) { console.log(JSON.stringify(st, null, 2)); return 0; }
+      const nm = cfg.peers[st.active].name;
+      console.log(`Lệnh claude đang mở: ${st.active}${nm !== st.active ? ` (${nm})` : ''}`);
+      console.log(st.mode === 'auto' ? `Tự chuyển: BẬT, khi account đang dùng tới ${st.threshold}% (5 giờ hoặc tuần)` : 'Tự chuyển: tắt (bấm chọn account trong duo monitor, hoặc duo switch A|B)');
+      if (a) console.log('Áp dụng từ lần gõ claude tiếp theo, ở mọi terminal. Phiên đang mở giữ nguyên account của nó.');
+      if (!hasClaudeFunction()) console.log('⚠ ~/.zshrc chưa có hàm claude của claude-duo: chạy lại ./install.sh rồi mở terminal mới.');
       return 0;
     }
     case 'monitor': {

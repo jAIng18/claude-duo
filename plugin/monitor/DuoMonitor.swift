@@ -5,7 +5,8 @@
 //   xcrun swiftc -O -parse-as-library -o duo-monitor DuoMonitor.swift
 // Usage: duo-monitor <node> <duo.mjs>. SIGUSR1 brings the window to the front.
 // It runs `node duo.mjs quota --watch` and draws each JSON line it prints.
-// Writing "refresh" to the child's stdin asks for a fresh quota request.
+// Lines written to the child's stdin: "refresh" (fresh quota request),
+// "use A|B" (plain `claude` opens that account), "mode manual|auto", "threshold N".
 import AppKit
 import SwiftUI
 
@@ -45,9 +46,20 @@ struct Peer: Decodable {
     let last_activity_at: String?
 }
 
+/// Which account a plain `claude` opens (plugin/lib/switch.mjs).
+struct SwitchState: Decodable {
+    let active: String
+    let mode: String
+    let threshold: Int
+    let changed_at: String?
+    let reason: String?
+}
+
 struct Snapshot: Decodable {
     let at: String
     let peers: [String: Peer]
+    let sw: SwitchState?
+    enum CodingKeys: String, CodingKey { case at, peers, sw = "switch" }
 }
 
 func parseDate(_ s: String?) -> Date? {
@@ -126,9 +138,14 @@ final class Store: ObservableObject {
         }
     }
 
-    func refresh() {
-        input?.fileHandleForWriting.write("refresh\n".data(using: .utf8)!)
+    private func send(_ line: String) {
+        input?.fileHandleForWriting.write("\(line)\n".data(using: .utf8)!)
     }
+
+    func refresh() { send("refresh") }
+    func use(_ peer: String) { send("use \(peer)") }
+    func setMode(_ mode: String) { send("mode \(mode)") }
+    func setThreshold(_ t: Int) { send("threshold \(t)") }
 
     func stop() {
         quitting = true
@@ -214,14 +231,37 @@ struct Meter: View {
     }
 }
 
+func peerColor(_ k: String) -> Color { k == "A" ? .blue : .purple }
+
 struct Badge: View {
     let letter: String
+    var active: Bool = false
     var body: some View {
         Text(letter)
             .font(.system(size: 13, weight: .bold, design: .rounded))
             .foregroundStyle(.white)
             .frame(width: 26, height: 26)
-            .background(RoundedRectangle(cornerRadius: 7).fill(letter == "A" ? Color.blue : Color.purple))
+            .background(RoundedRectangle(cornerRadius: 7).fill(peerColor(letter)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 9)
+                    .stroke(peerColor(letter), lineWidth: 2)
+                    .padding(-3)
+                    .opacity(active ? 1 : 0)
+            )
+    }
+}
+
+/// "IN USE" tag next to the account a plain `claude` opens.
+struct InUsePill: View {
+    let peer: String
+    var body: some View {
+        Text("IN USE")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(peerColor(peer)))
+            .help("A plain `claude` in any terminal opens this account")
     }
 }
 
@@ -239,17 +279,39 @@ struct PeerCard: View {
     let key_: String
     let peer: Peer
     let now: Date
+    var active: Bool = false
+    var onUse: () -> Void = {}
+    @State private var hover = false
 
     var body: some View {
+        Button(action: { if !active { onUse() } }) { content }
+            .buttonStyle(.plain)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(active ? peerColor(key_).opacity(0.10) : Color.primary.opacity(hover ? 0.05 : 0))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+            )
+            .onHover { hover = $0 }
+            .help(active ? "In use: a plain `claude` opens this account" : "Click to use this account for `claude` (open sessions keep theirs)")
+    }
+
+    @ViewBuilder var content: some View {
         let q = peer.quota
         let dim = q?.ok != true
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 9) {
-                Badge(letter: key_)
+                Badge(letter: key_, active: active)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(peer.name == key_ ? "Account \(key_)" : peer.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(peer.name == key_ ? "Account \(key_)" : peer.name)
+                            .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
+                        if active { InUsePill(peer: key_) }
+                        if hover && !active {
+                            Text("Use").font(.system(size: 10, weight: .semibold)).foregroundStyle(peerColor(key_))
+                        }
+                    }
                     Text(q?.plan ?? "—").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -287,6 +349,7 @@ struct PeerCard: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .contentShape(Rectangle())
     }
 }
 
@@ -295,18 +358,20 @@ struct PeerCard: View {
 struct CompactIcon: View {
     let key_: String
     let peer: Peer?
+    var active: Bool = false
 
     var summary: String {
         guard let p = peer else { return key_ }
-        var parts = ["\(key_) · \(stateText[p.state ?? "offline"] ?? "")"]
+        var parts = ["\(key_)\(active ? " (in use)" : "") · \(stateText[p.state ?? "offline"] ?? "")"]
         if let s = p.quota?.session { parts.append("5h \(s.pct)%") }
         if let w = p.quota?.weekly { parts.append("Week \(w.pct)%") }
         if let e = p.quota?.error { parts.append(errorText(e, peer: key_)) }
+        if !active { parts.append("click to use for `claude`") }
         return parts.joined(separator: " · ")
     }
 
     var body: some View {
-        Badge(letter: key_)
+        Badge(letter: key_, active: active)
             .overlay(alignment: .bottomTrailing) {
                 Circle()
                     .fill(stateColor[peer?.state ?? "offline"] ?? .gray)
@@ -336,6 +401,62 @@ struct IconButton: View {
     }
 }
 
+/// Bottom bar: which account `claude` opens, Manual / Auto, and the auto threshold.
+struct SwitchBar: View {
+    @ObservedObject var store: Store
+    let sw: SwitchState
+    let name: String
+    let now: Date
+
+    var recentlyChanged: Bool {
+        guard let d = parseDate(sw.changed_at) else { return false }
+        return now.timeIntervalSince(d) < 12
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Image(systemName: "terminal").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("claude → \(sw.active)")
+                    .font(.system(size: 11, weight: .semibold).monospaced())
+                    .help("A plain `claude` in any terminal opens account \(sw.active) (\(name))")
+                Spacer()
+                if sw.mode == "auto" {
+                    Menu {
+                        ForEach([70, 80, 90, 95, 100], id: \.self) { t in
+                            Button("Switch at \(t)%\(t == sw.threshold ? "  ✓" : "")") { store.setThreshold(t) }
+                        }
+                    } label: {
+                        Text("at \(sw.threshold)%").font(.system(size: 11))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Switch when the account in use reaches this much of its 5h or weekly limit")
+                }
+                Picker("", selection: Binding(get: { sw.mode }, set: { store.setMode($0) })) {
+                    Text("Manual").tag("manual")
+                    Text("Auto").tag("auto")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+                .help("Manual: click an account above to switch. Auto: move to the other account when this one is nearly used up.")
+            }
+            if recentlyChanged {
+                Text((sw.reason ?? "").hasPrefix("auto")
+                     ? "Auto-switched to \(sw.active). The next `claude` uses it; open sessions keep their account."
+                     : "The next `claude` you start uses \(sw.active). Open sessions keep their account.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+}
+
 struct MonitorView: View {
     @ObservedObject var store: Store
 
@@ -346,8 +467,8 @@ struct MonitorView: View {
                 // Click an icon (or ↗) to expand; drag the space around them to move the window.
                 HStack(spacing: 10) {
                     ForEach(["A", "B"], id: \.self) { k in
-                        CompactIcon(key_: k, peer: store.snap?.peers[k])
-                            .onTapGesture { store.compact = false }
+                        CompactIcon(key_: k, peer: store.snap?.peers[k], active: store.snap?.sw?.active == k)
+                            .onTapGesture { if store.snap?.sw?.active != k { store.use(k) } }
                     }
                     VStack(spacing: 0) {
                         IconButton(symbol: "arrow.up.left.and.arrow.down.right", help: "Expand", size: 16) { store.compact = false }
@@ -365,9 +486,13 @@ struct MonitorView: View {
                 if let snap = store.snap {
                     ForEach(["A", "B"], id: \.self) { k in
                         if let p = snap.peers[k] {
-                            PeerCard(key_: k, peer: p, now: now)
+                            PeerCard(key_: k, peer: p, now: now, active: snap.sw?.active == k) { store.use(k) }
                             if k == "A" { Divider().padding(.horizontal, 14) }
                         }
+                    }
+                    if let sw = snap.sw {
+                        Divider()
+                        SwitchBar(store: store, sw: sw, name: snap.peers[sw.active]?.name ?? sw.active, now: now)
                     }
                 } else {
                     Text(store.problem ?? "Starting…")

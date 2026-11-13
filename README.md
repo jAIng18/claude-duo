@@ -98,7 +98,7 @@ Then restart any open `claude` / `claude-b` sessions.
 
 | Account | Open it with |
 |---|---|
-| A (your usual account, `~/.claude`) | `claude`, as always |
+| A (your usual account, `~/.claude`) | `claude`, as always (or whichever account you switched to, see [Switching accounts](#switching-accounts)) |
 | B (the second account, `~/.claude-b`) | `claude-b` |
 
 Plain `claude` already loads claude-duo for account A, so nothing changes in how you start Claude.
@@ -132,7 +132,7 @@ duo monitor          # small window; run it again to bring it to the front, `duo
 duo quota            # the same numbers once, in the terminal (--json for scripts)
 ```
 
-The window shows, for each account: the plan, the 5-hour and weekly limits (the same numbers as `/usage`) with time until reset, whether the account is working, idle or waiting for you, open claude-duo tasks, and the tokens used in the last 5 hours. The arrows button shrinks it to just the two account icons (a dot shows each one's state; hover for the numbers). Next to them, ↗ opens the full view again (clicking an icon does too) and × quits.
+The window shows, for each account: the plan, the 5-hour and weekly limits (the same numbers as `/usage`) with time until reset, whether the account is working, idle or waiting for you, open claude-duo tasks, and the tokens used in the last 5 hours. The account that a plain `claude` opens is marked **IN USE**; click the other one to switch (see below). The arrows button shrinks it to just the two account icons (a dot shows each one's state, a ring marks the one in use; hover for the numbers, click an icon to switch to it). Next to them, ↗ opens the full view again and × quits.
 
 It behaves like any other app: it has a Dock icon, shows up in Cmd+Tab and goes behind other apps when you switch away. The pin button keeps it on top of every window (and on every Space) until you unpin it. Drag it anywhere; it remembers where you left it. Cmd+Q or × quits.
 
@@ -140,6 +140,27 @@ It behaves like any other app: it has a Dock icon, shows up in Cmd+Tab and goes 
 - The first `duo monitor` builds the window with Xcode Command Line Tools (`xcode-select --install` if missing), about 30 s.
 - Each account's login token is read from the macOS Keychain and sent only to Anthropic's usage endpoint. That endpoint is not a public API, so it may change; if it fails, the window says so and keeps the last known numbers.
 - **"Login expired"**: the account has not been used for a while, so its login token expired. Open it once (`claude` or `claude-b`) and the numbers come back by themselves.
+
+### Switching accounts
+
+When one account runs low, make a plain `claude` open the other one, by hand or automatically.
+
+| To | In the `duo monitor` window | In a terminal |
+|---|---|---|
+| Use account B for `claude` | click B's card | `duo switch B` |
+| Back to A | click A's card | `duo switch A` |
+| Switch on its own when the account in use is nearly used up | **Auto** at the bottom; pick the level with **at 90%** | `duo switch auto --at 90` |
+| Only switch when I say so | **Manual** | `duo switch manual` |
+| See which account `claude` opens | `claude → A` at the bottom | `duo switch` |
+
+- It applies to the **next** `claude` you start, in every terminal: no need to open a new one. Sessions already open keep their account (Claude Code cannot move a running session to another login).
+- Nothing about the logins changes: each account keeps its own folder and Keychain entry, and no token is copied or refreshed. The installer adds a small `claude` function to `~/.zshrc` that asks claude-duo which folder to use each time.
+- **Auto** looks at the higher of the 5-hour and weekly percentages. When the account in use reaches the level you chose (default 90%) and the other account is logged in and below it, `claude` moves to the other one and you get a notification. It does not switch back by itself until that account fills up in turn. It checks while `duo monitor` is open, and again every time you type `claude`.
+- Clicking an account while **Auto** is on switches to it and turns Auto off, so it does not jump straight back.
+- The session started by `claude` takes the role of the account it opens: after switching to B, it is peer B for claude-duo.
+- Your history stays per account: `claude --resume` shows only the sessions of the account in use.
+- If you set `CLAUDE_CONFIG_DIR` yourself, `claude` follows it and ignores the switch. `claude-b` always opens B.
+- Installed before this feature? Run `./install.sh` again and open a new terminal.
 
 ## Troubleshooting
 
