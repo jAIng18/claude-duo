@@ -20,12 +20,25 @@ function _claude_duo_run {
   if [[ -n "$_CLAUDE_DUO_REAL" ]]; then ${~=_CLAUDE_DUO_REAL} "$@"; else command claude "$@"; fi
 }
 
+# 1DevTool's own account pool puts CLAUDE_CONFIG_DIR=~/.1devtool/ai-pool/claude/homes/<id>
+# in every terminal it opens. That is not a choice the user typed, so the
+# switch still applies there; any other CLAUDE_CONFIG_DIR is left alone.
+function _claude_duo_user_dir {
+  [[ -n "${CLAUDE_CONFIG_DIR-}" && "${CLAUDE_CONFIG_DIR:A}" != "${HOME:A}/.1devtool/ai-pool/"* ]]
+}
+
 function claude {
-  if [[ -z "${CLAUDE_CONFIG_DIR-}" && -z "${CLAUDECODE-}" && -r "$_CLAUDE_DUO_JS" ]]; then
-    local _duo_dir
+  if ! _claude_duo_user_dir && [[ -z "${CLAUDECODE-}" && -r "$_CLAUDE_DUO_JS" ]]; then
+    local _duo_dir _duo_rc
     _duo_dir="$(node "$_CLAUDE_DUO_JS" switch --resolve 2>/dev/null)"
+    _duo_rc=$?
     if [[ -n "$_duo_dir" && -d "$_duo_dir" ]]; then
       CLAUDE_CONFIG_DIR="$_duo_dir" _claude_duo_run "$@"
+      return
+    fi
+    # '' = the default ~/.claude account: drop a pool dir 1DevTool put there.
+    if (( _duo_rc == 0 )) && [[ -z "$_duo_dir" && -n "${CLAUDE_CONFIG_DIR-}" ]]; then
+      (unset CLAUDE_CONFIG_DIR; _claude_duo_run "$@")
       return
     fi
   fi
